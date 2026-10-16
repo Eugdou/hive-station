@@ -31,6 +31,14 @@
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o HiveStation-Portable
 ```
 
+## 轻量 HTML 版本
+
+仓库根目录的 [`command-center.html`](command-center.html) 是本项目的原始轻量化网页版「Buddy's Command Center」——一个单 HTML 文件（纯 HTML/CSS/JS、零依赖、零构建），数据存浏览器 localStorage，双击即可在任何浏览器打开使用。
+
+它是 Hive Station 的设计起点：随手记 + 待办（项目分组、行内编辑、加急）的核心交互均源自此文件。Hive Station 将其原生重写为 WPF 桌面应用，并新增了边缘吸附、待办详情、稳定排序、双主题、便携发布等桌面端能力。
+
+如果你只需要一个能随时在浏览器打开的极简工作台、不需要桌面窗口能力，可以直接用这个 HTML 版本；它的「导出 JSON」可作为数据迁移桥梁导入 Hive Station。
+
 ## 技术栈
 
 C# + WPF（.NET 10），零额外 NuGet 依赖，手写 MVVM。
