@@ -1,0 +1,17 @@
+<Application x:Class="WorkingCenter.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:WorkingCenter"
+             xmlns:v="clr-namespace:WorkingCenter.Views">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Views/Icons.xaml"/>
+                <!-- active theme dictionary is inserted here by App.OnStartup
+                     (Views/Themes/Light.xaml or Dark.xaml). -->
+            </ResourceDictionary.MergedDictionaries>
+            <v:BoolToVisibilityConverter x:Key="BoolToVis"/>
+            <v:NonEmptyToVisibilityConverter x:Key="NonEmptyToVis"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

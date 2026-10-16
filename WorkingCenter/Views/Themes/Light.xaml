@@ -1,0 +1,26 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Linear-style LIGHT theme. Merged after Icons.xaml to override token brushes. -->
+    <SolidColorBrush x:Key="WindowBg" Color="#F7F8FA"/>
+    <SolidColorBrush x:Key="CardBg" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="CardBorder" Color="#E6E8EB"/>
+    <SolidColorBrush x:Key="HoverBg" Color="#F0F1F3"/>
+    <SolidColorBrush x:Key="InputBg" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="InputBorder" Color="#E6E8EB"/>
+    <SolidColorBrush x:Key="Ink" Color="#1F2430"/>
+    <SolidColorBrush x:Key="Muted" Color="#6B7280"/>
+    <SolidColorBrush x:Key="Faint" Color="#9CA3AF"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="#5E6AD2"/>
+    <SolidColorBrush x:Key="AccentHover" Color="#6E7AE0"/>
+    <SolidColorBrush x:Key="AccentSoft" Color="#EEF0FB"/>
+    <SolidColorBrush x:Key="Danger" Color="#E5484D"/>
+    <SolidColorBrush x:Key="DangerHover" Color="#D13438"/>
+    <SolidColorBrush x:Key="DangerSoftBg" Color="#FDF2F2"/>
+    <SolidColorBrush x:Key="UrgentBar" Color="#E5484D"/>
+    <SolidColorBrush x:Key="UrgentBg" Color="#FFF6F1"/>
+    <SolidColorBrush x:Key="Done" Color="#4CBA64"/>
+    <SolidColorBrush x:Key="DetailBar" Color="#E6E8EB"/>
+    <SolidColorBrush x:Key="DetailBg" Color="#F4F5F7"/>
+    <SolidColorBrush x:Key="HeaderBg" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PinFill" Color="#F0F1F3"/>
+</ResourceDictionary>

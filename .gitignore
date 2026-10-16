@@ -1,0 +1,26 @@
+# Build output
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+# Portable release build (regenerate via: dotnet publish)
+HiveStation-Portable/
+
+# User runtime data (created on first run, do not ship)
+data/
+hive-station.log
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# local tool settings
+.claude/settings.local.json

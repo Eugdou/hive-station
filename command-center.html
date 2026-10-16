@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buddy's Command Center</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --ink: #1f2430;
+    --muted: #6b7280;
+    --accent: #f5a623;
+    --accent-soft: #fff3e0;
+    --line: #e6e8eb;
+    --green: #16a34a;
+    --red: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+  }
+  .logo { font-size: 34px; }
+  header h1 { font-size: 22px; margin: 0; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .clock {
+    margin-left: auto; text-align: right;
+  }
+  .clock .time { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .clock .date { font-size: 13px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+  .card h2 {
+    font-size: 14px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 12px;
+  }
+  textarea {
+    width: 100%; min-height: 120px; resize: vertical;
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+    font: inherit; color: var(--ink); background: #fcfcfd;
+  }
+  textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .row { display: flex; gap: 10px; margin-bottom: 12px; }
+  input[type=text] {
+    flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    font: inherit; color: var(--ink); background: #fcfcfd; min-width: 0;
+  }
+  input[type=text]:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  select#projSelect {
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    font: inherit; color: var(--ink); background: #fcfcfd; cursor: pointer;
+  }
+  select#projSelect:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  button {
+    border: none; border-radius: 10px; padding: 10px 16px;
+    font: inherit; font-weight: 600; cursor: pointer; background: var(--accent); color: #fff;
+  }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  button:hover { filter: brightness(1.05); }
+
+  .pdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  /* grouped todo lists */
+  .ghead {
+    display: flex; align-items: center; gap: 8px;
+    margin: 18px 0 4px; font-weight: 700; font-size: 15px;
+  }
+  .ghead:first-of-type { margin-top: 4px; }
+  .ghead .gcount { font-weight: 500; font-size: 12px; color: var(--muted); }
+
+  ul.todos { list-style: none; padding: 0; margin: 0; }
+  ul.todos li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 8px; border-bottom: 1px solid var(--line);
+  }
+  ul.todos li:last-child { border-bottom: none; }
+  ul.todos li.done span { text-decoration: line-through; color: var(--muted); }
+  ul.todos li.urgent {
+    background: #fff1f0; border-radius: 8px;
+    border-bottom-color: transparent; box-shadow: inset 3px 0 0 var(--red);
+  }
+  ul.todos input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--green); flex: none; }
+  ul.todos .txt { word-break: break-word; }
+  .todo-act {
+    width: 24px; height: 24px; padding: 0; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: none; border: none; cursor: pointer; line-height: 1;
+    border-radius: 5px; color: var(--muted);
+  }
+  .todo-act:hover { background: #f0f1f3; }
+  .todo-act svg { display: block; }
+  .todo-act.edit { color: #2563eb; }
+  .todo-act.urgent { color: #ca8a04; }
+  .todo-act.urgent.on { background: #fef9c3; }
+  .todo-act.del { color: var(--red); }
+  .todo-act.save { color: var(--green); }
+  .todo-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+  .todo-edit {
+    flex: 1; min-width: 0; border: 1px solid var(--accent); border-radius: 8px;
+    padding: 6px 8px; font: inherit; color: var(--ink); background: #fff;
+  }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 4px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+  footer .link { color: var(--muted); cursor: pointer; text-decoration: underline; }
+  footer .link:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🐝</div>
+    <div>
+      <h1>Buddy's Command Center</h1>
+      <p>你的轻量工作台 · 数据只存在本地浏览器</p>
+    </div>
+    <div class="clock">
+      <div class="time" id="time">--:--:--</div>
+      <div class="date" id="date">----</div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>📝 随手记 / Quick Notes</h2>
+      <textarea id="notes" placeholder="想到什么就写什么，自动保存…"></textarea>
+    </div>
+
+    <div class="card">
+      <h2>✅ 今日待办 / To-Do</h2>
+      <div class="row">
+        <select id="projSelect"></select>
+        <input type="text" id="todoInput" placeholder="加一项任务，回车也行…">
+        <button id="addBtn">添加</button>
+      </div>
+      <div id="groups"></div>
+      <div class="empty" id="todoEmpty">还没有任务，加一个吧。</div>
+    </div>
+  </div>
+
+  <footer>清除浏览器缓存会丢失全部数据，<span class="link" id="exportBtn">导出JSON</span> · <span class="link" id="importBtn">导入JSON</span> · <span class="link" id="clearBtn">清除全部</span></footer>
+</div>
+
+<script>
+  // Clock
+  function tick() {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    document.getElementById('time').textContent =
+      pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+    const wd = ['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
+    document.getElementById('date').textContent =
+      now.getFullYear() + '年' + (now.getMonth()+1) + '月' + now.getDate() + '日 ' + wd;
+  }
+  tick(); setInterval(tick, 1000);
+
+  // Notes (localStorage)
+  const notes = document.getElementById('notes');
+  notes.value = localStorage.getItem('buddy_notes') || '';
+  notes.addEventListener('input', () => localStorage.setItem('buddy_notes', notes.value));
+
+  // Todos (localStorage) — grouped by project
+  const KEY = 'buddy_todos';
+  const PROJECTS = [
+    { key: 'FT',   color: '#2563eb' },
+    { key: 'RF',   color: '#7c3aed' },
+    { key: 'FS',   color: '#16a34a' },
+    { key: 'FTMG', color: '#ea580c' },
+    { key: 'NFW',  color: '#0891b2' },
+  ];
+  const colorOf = k => (PROJECTS.find(p => p.key === k) || {}).color || '#9ca3af';
+
+  let todos = (JSON.parse(localStorage.getItem(KEY) || '[]')).map(t => ({
+    id: t.id || (Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
+    text: t.text || '',
+    done: !!t.done,
+    project: t.project || '',
+    urgent: !!t.urgent
+  }));
+  let lastProj = localStorage.getItem('buddy_lastproj') || 'FT';
+  let editingId = null;
+  const ICONS = {
+    edit:   '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+    urgent: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    del:    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    check:  '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+  };
+
+  const sel = document.getElementById('projSelect');
+  PROJECTS.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.key; o.textContent = p.key;
+    sel.appendChild(o);
+  });
+  sel.value = lastProj;
+
+  const groups = document.getElementById('groups');
+  const emptyEl = document.getElementById('todoEmpty');
+
+  function render() {
+    groups.innerHTML = '';
+    const keys = PROJECTS.map(p => p.key).concat(todos.some(t => !t.project) ? [''] : []);
+
+    let anyShown = false;
+    keys.forEach(key => {
+      const items = todos
+        .map((t, i) => ({ t, i }))
+        .filter(o => o.t.project === key)
+        .sort((a, b) => (a.t.done === b.t.done ? a.i - b.i : a.t.done ? 1 : -1))
+        .map(o => o.t);
+      if (!items.length) return;
+      anyShown = true;
+
+      const label = key === '' ? '未分类' : key;
+      const done = items.filter(t => t.done).length;
+      const head = document.createElement('div');
+      head.className = 'ghead';
+      const dot = document.createElement('span'); dot.className = 'pdot'; dot.style.background = colorOf(key);
+      const nm = document.createElement('span'); nm.textContent = label;
+      const cnt = document.createElement('span'); cnt.className = 'gcount';
+      cnt.textContent = done + '/' + items.length + ' 完成';
+      head.append(dot, nm, cnt);
+      groups.appendChild(head);
+
+      const ul = document.createElement('ul');
+      ul.className = 'todos';
+      items.forEach(t => {
+        const li = document.createElement('li');
+        li.className = (t.done ? 'done ' : '') + (t.urgent ? 'urgent' : '').trim();
+
+        if (t.id === editingId) {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.checked = t.done; cb.disabled = true;
+          const inp = document.createElement('input');
+          inp.className = 'todo-edit'; inp.value = t.text;
+          const commit = () => {
+            const v = inp.value.trim();
+            if (v) t.text = v;
+            editingId = null; save(); render();
+          };
+          inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
+          inp.addEventListener('blur', commit);
+          const saveBtn = document.createElement('button');
+          saveBtn.className = 'todo-act save'; saveBtn.innerHTML = ICONS.check;
+          saveBtn.onclick = commit;
+          const del = document.createElement('button');
+          del.className = 'todo-act del'; del.innerHTML = ICONS.del;
+          del.onclick = () => { todos = todos.filter(x => x.id !== t.id); save(); render(); };
+          const acts = document.createElement('div');
+          acts.className = 'todo-actions';
+          acts.append(saveBtn, del);
+          li.append(cb, inp, acts);
+          ul.appendChild(li);
+          inp.focus(); inp.select();
+        } else {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.checked = t.done;
+          cb.onchange = () => { t.done = cb.checked; save(); render(); };
+          const span = document.createElement('span');
+          span.className = 'txt'; span.textContent = t.text;
+          const editBtn = document.createElement('button');
+          editBtn.className = 'todo-act edit'; editBtn.innerHTML = ICONS.edit;
+          editBtn.title = '修改';
+          editBtn.onclick = () => { editingId = t.id; render(); };
+          const urgBtn = document.createElement('button');
+          urgBtn.className = 'todo-act urgent' + (t.urgent ? ' on' : '');
+          urgBtn.innerHTML = ICONS.urgent; urgBtn.title = '加急';
+          urgBtn.onclick = () => { t.urgent = !t.urgent; save(); render(); };
+          const del = document.createElement('button');
+          del.className = 'todo-act del'; del.innerHTML = ICONS.del;
+          del.onclick = () => { todos = todos.filter(x => x.id !== t.id); save(); render(); };
+          const acts = document.createElement('div');
+          acts.className = 'todo-actions';
+          acts.append(editBtn, urgBtn, del);
+          li.append(cb, span, acts);
+          ul.appendChild(li);
+        }
+      });
+      groups.appendChild(ul);
+    });
+
+    if (!anyShown) {
+      emptyEl.style.display = 'block';
+      emptyEl.textContent = '还没有任务，加一个吧。';
+    } else {
+      emptyEl.style.display = 'none';
+    }
+  }
+
+  function save() { localStorage.setItem(KEY, JSON.stringify(todos)); }
+  function add() {
+    const inp = document.getElementById('todoInput');
+    const v = inp.value.trim();
+    if (!v) return;
+    const p = sel.value;
+    lastProj = p; localStorage.setItem('buddy_lastproj', p);
+    todos.push({
+      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      text: v, done: false, project: p, urgent: false
+    });
+    inp.value = ''; save(); render(); inp.focus();
+  }
+  document.getElementById('addBtn').onclick = add;
+  document.getElementById('todoInput').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+
+  render();
+
+  // Export backup
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const data = {
+      notes: notes.value,
+      todos: todos,
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'buddy-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // Import backup
+  document.getElementById('importBtn').addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = () => {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (!data.todos || !Array.isArray(data.todos)) throw new Error('无效的备份文件');
+          notes.value = data.notes || '';
+          localStorage.setItem('buddy_notes', notes.value);
+          todos = data.todos.map(t => ({
+            id: t.id || (Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
+            text: t.text || '',
+            done: !!t.done,
+            project: t.project || '',
+            urgent: !!t.urgent
+          }));
+          save();
+          render();
+          alert('数据已导入！');
+        } catch (e) {
+          alert('导入失败：文件格式不正确');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  });
+
+  // Clear all data
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    if (!confirm('确定要清除全部数据吗？此操作不可撤销。')) return;
+    todos = [];
+    notes.value = '';
+    localStorage.removeItem('buddy_todos');
+    localStorage.removeItem('buddy_notes');
+    save();
+    render();
+  });
+</script>
+</body>
+</html>
