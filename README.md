@@ -1,6 +1,6 @@
 # Hive Station 🐝
 
-一个 Windows 便携桌面工作台，吸附在屏幕边缘，鼠标悬停展开，离开自动收起。原网页版「Buddy's Command Center」原生重写为 C# + WPF，零云端依赖、零运行时安装。
+一个 Windows 便携桌面工作台，吸附在屏幕边缘，鼠标悬停展开，离开自动收起，零云端依赖、零运行时安装。
 
 ## 特性
 
@@ -18,7 +18,6 @@
 - JSON 快照 + 原子写（`.tmp` → `File.Move`）防半写损坏
 - 写前备份 `.prev.json`，损坏时回滚链：主文件 → `.prev` → 备份 → 默认
 - schema 版本化迁移
-- 旧网页版导出 JSON 可导入（双格式、大小写不敏感）
 
 ## 运行要求
 
@@ -34,8 +33,6 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 ## 轻量 HTML 版本
 
 仓库根目录的 [`command-center.html`](command-center.html) 是本项目的原始轻量化网页版「Buddy's Command Center」——一个单 HTML 文件（纯 HTML/CSS/JS、零依赖、零构建），数据存浏览器 localStorage，双击即可在任何浏览器打开使用。
-
-它是 Hive Station 的设计起点：随手记 + 待办（项目分组、行内编辑、加急）的核心交互均源自此文件。Hive Station 将其原生重写为 WPF 桌面应用，并新增了边缘吸附、待办详情、稳定排序、双主题、便携发布等桌面端能力。
 
 如果你只需要一个能随时在浏览器打开的极简工作台、不需要桌面窗口能力，可以直接用这个 HTML 版本；它的「导出 JSON」可作为数据迁移桥梁导入 Hive Station。
 
