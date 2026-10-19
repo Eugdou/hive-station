@@ -134,6 +134,19 @@
                                    HorizontalAlignment="Right" Margin="0,2,0,0"/>
                     </StackPanel>
                 </Border>
+
+                <!-- inline delete-confirm row (no popup) -->
+                <Border Visibility="{Binding IsDeleteConfirm, Converter={StaticResource BoolToVis}}"
+                        Background="{DynamicResource DangerSoftBg}" CornerRadius="6" Padding="10,8" Margin="0,6,0,0"
+                        BorderBrush="{DynamicResource Danger}" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="确定删除该任务？" FontSize="12" Foreground="{DynamicResource Danger}" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="取消" Command="{Binding CancelDeleteCommand}" Style="{StaticResource SecondaryButton}" Padding="10,4" FontSize="11" Margin="0,0,6,0"/>
+                            <Button Content="确认删除" Command="{Binding ConfirmDeleteCommand}" Style="{StaticResource DangerSolidButton}" Padding="10,4" FontSize="11"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </DataTemplate>
     </UserControl.Resources>

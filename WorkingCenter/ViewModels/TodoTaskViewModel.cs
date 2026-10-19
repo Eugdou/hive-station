@@ -62,6 +62,11 @@ internal sealed class TodoTaskViewModel : ViewModelBase
     private string _editBuffer = "";
     public string EditBuffer { get => _editBuffer; set => SetProperty(ref _editBuffer, value); }
 
+    // inline delete-confirmation (no popup): DeleteCommand enters this state,
+    // ConfirmDeleteCommand commits the real delete, CancelDeleteCommand backs out.
+    private bool _isDeleteConfirm;
+    public bool IsDeleteConfirm { get => _isDeleteConfirm; set => SetProperty(ref _isDeleteConfirm, value); }
+
     // ---- detail (stage 4) -------------------------------------------------
     // Detail is bound directly (no commit buffer): it's free text that auto-saves,
     // with no blank rejection. Each keystroke marks the task's detail dirty and
@@ -92,6 +97,8 @@ internal sealed class TodoTaskViewModel : ViewModelBase
     public ICommand ToggleUrgentCommand { get; }
     public ICommand ToggleDetailCommand { get; }
     public ICommand DeleteCommand { get; }
+    public ICommand ConfirmDeleteCommand { get; }
+    public ICommand CancelDeleteCommand { get; }
 
     public TodoTaskViewModel(TodoTask model, ITaskHost host)
     {
@@ -107,7 +114,10 @@ internal sealed class TodoTaskViewModel : ViewModelBase
         CancelEditCommand = new RelayCommand(CancelEdit);
         ToggleUrgentCommand = new RelayCommand(() => IsUrgent = !IsUrgent);
         ToggleDetailCommand = new RelayCommand(() => IsDetailOpen = !IsDetailOpen);
-        DeleteCommand = new RelayCommand(() => _host.DeleteTask(this));
+        // Delete shows an inline confirm row (no popup); confirm/cancel below.
+        DeleteCommand = new RelayCommand(() => { _host.BeginDeleteTask(this); });
+        ConfirmDeleteCommand = new RelayCommand(() => _host.CommitDeleteTask(this));
+        CancelDeleteCommand = new RelayCommand(() => IsDeleteConfirm = false);
     }
 
     /// <summary>Called by the host when this task enters edit mode.</summary>
@@ -145,5 +155,6 @@ internal interface ITaskHost
     void OnTaskMutated(TodoTaskViewModel task);  // persist + rebuild groups
     void OnDetailChanged(TodoTaskViewModel task);// debounced save of task detail + status
     void OnEditingChanged();                     // recompute IsEditingAny
-    void DeleteTask(TodoTaskViewModel task);     // confirm then remove + persist
+    void BeginDeleteTask(TodoTaskViewModel task);// show inline delete-confirm row
+    void CommitDeleteTask(TodoTaskViewModel task);// actually remove + persist
 }

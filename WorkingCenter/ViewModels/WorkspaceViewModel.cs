@@ -318,9 +318,15 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
 
     void ITaskHost.OnEditingChanged() => RecomputeEditingAny();
 
-    void ITaskHost.DeleteTask(TodoTaskViewModel task)
+    void ITaskHost.BeginDeleteTask(TodoTaskViewModel task)
     {
-        if (RequestConfirm?.Invoke("删除任务", $"确定删除「{task.Title}」吗？") != true) return;
+        // close any other task's inline confirm first
+        foreach (var t in _taskVm.Values) t.IsDeleteConfirm = false;
+        task.IsDeleteConfirm = true;
+    }
+
+    void ITaskHost.CommitDeleteTask(TodoTaskViewModel task)
+    {
         _data.Tasks.RemoveAll(t => t.Id == task.Id);
         if (_editingTaskId == task.Id) _editingTaskId = null;
         _taskVm.Remove(task.Id);

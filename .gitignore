@@ -14,7 +14,7 @@ obj/
 HiveStation-Portable/
 
 # User runtime data (created on first run, do not ship)
-data/
+/data/
 hive-station.log
 
 # OS junk
