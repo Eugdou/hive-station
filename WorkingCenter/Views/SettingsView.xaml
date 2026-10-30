@@ -21,7 +21,22 @@
                 </StackPanel>
             </Border>
 
-            <!-- 2. 固定位置 -->
+            <!-- 2. 开机自启 -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="开机自启" Style="{StaticResource SectionLabel}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <!-- "是"绑定 AutoStartEnabled(IsChecked 双向默认)；"否"同组互斥，
+                             勾"否"会反推绑定把 false 写回 setter（写注册表） -->
+                        <RadioButton Content="是" Style="{StaticResource Radio}" GroupName="AutoStart"
+                                     IsChecked="{Binding AutoStartEnabled}"/>
+                        <RadioButton Content="否" Style="{StaticResource Radio}" GroupName="AutoStart"
+                                     IsChecked="{Binding AutoStartEnabled, Converter={StaticResource InvertBool}}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- 3. 固定位置 -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Text="固定位置" Style="{StaticResource SectionLabel}"/>

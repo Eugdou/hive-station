@@ -12,6 +12,7 @@
             </ResourceDictionary.MergedDictionaries>
             <v:BoolToVisibilityConverter x:Key="BoolToVis"/>
             <v:NonEmptyToVisibilityConverter x:Key="NonEmptyToVis"/>
+            <v:InverseBoolConverter x:Key="InvertBool"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

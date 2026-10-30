@@ -150,6 +150,25 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
         SetThemeDarkCommand = new RelayCommand(() => SetTheme(WorkingCenter.Views.ThemeService.Theme.Dark));
     }
 
+    /// <summary>开机自启开关。注册表 HKCU Run 键持久化，默认关闭；
+    /// setter 写注册表，失败则回弹 UI 状态并提示。</summary>
+    public bool AutoStartEnabled
+    {
+        get => _autoStartEnabled;
+        set
+        {
+            if (_autoStartEnabled == value) return;
+            bool ok = value ? WorkingCenter.Core.AutoStart.Enable() : WorkingCenter.Core.AutoStart.Disable();
+            if (ok) SetProperty(ref _autoStartEnabled, value);
+            else
+            {
+                Raise(nameof(AutoStartEnabled));   // revert the checkbox
+                RequestAlert?.Invoke(value ? "开机自启设置失败（可能被安全软件拦截）。" : "取消开机自启失败。");
+            }
+        }
+    }
+    private bool _autoStartEnabled = WorkingCenter.Core.AutoStart.IsEnabled();
+
     public Views.ThemeService.Theme Theme { get => _theme; private set => SetProperty(ref _theme, value); }
     private Views.ThemeService.Theme _theme = Views.ThemeService.Theme.Light;
 
