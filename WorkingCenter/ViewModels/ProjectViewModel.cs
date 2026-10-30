@@ -40,7 +40,23 @@ internal sealed class ProjectViewModel : ViewModelBase
     }
     public bool HasMoveTargets => MoveTargets.Count > 0;
     private ProjectViewModel? _moveTarget;
-    public ProjectViewModel? MoveTarget { get => _moveTarget; set => SetProperty(ref _moveTarget, value); }
+    public ProjectViewModel? MoveTarget
+    {
+        get => _moveTarget;
+        set
+        {
+            if (SetProperty(ref _moveTarget, value))
+                DeleteBlockedMessage = "";   // picking a target resolves the "select target" hint
+        }
+    }
+
+    // inline rename validation error (red text under the rename box)
+    private string _editError = "";
+    public string EditError { get => _editError; set => SetProperty(ref _editError, value); }
+
+    // inline red message inside the delete-confirm row (blocked delete / missing target)
+    private string _deleteBlockedMessage = "";
+    public string DeleteBlockedMessage { get => _deleteBlockedMessage; set => SetProperty(ref _deleteBlockedMessage, value); }
 
     public ProjectViewModel(Project p)
     {

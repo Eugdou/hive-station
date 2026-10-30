@@ -1,49 +1,40 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
+using System.Windows;
+using System.Windows.Resources;
 
 namespace WorkingCenter.Core;
 
 /// <summary>
-/// Draws a small bee icon at runtime so the tray (and later the app icon) is
-/// on-brand without shipping a separate .ico file yet.
+/// Builds the tray icon from the embedded pixel-bee image (bee.png), so the
+/// tray matches the header logo and the exe icon (bee.ico — regenerated from
+/// the same png). One source of truth for the bee, no GDI hand-drawing.
 /// </summary>
 internal static class IconGenerator
 {
     public static Icon CreateBeeIcon()
     {
-        const int size = 32;
-        var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(bmp))
+        // 48px base so HiDPI (150–200%) taskbars scale down cleanly
+        const int size = 48;
+        using var bmp = LoadBeePng();
+        using var scaled = new Bitmap(size, size);
+        using (var g = Graphics.FromImage(scaled))
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-
-            // wings (drawn first, behind the body): translucent white ellipses
-            using (var wing = new SolidBrush(Color.FromArgb(200, 255, 255, 255)))
-            {
-                g.FillEllipse(wing, 6, 5, 9, 8);
-                g.FillEllipse(wing, 17, 5, 9, 8);
-            }
-
-            // body: amber horizontal ellipse
-            var bodyRect = new Rectangle(6, 10, 20, 15);
-            using (var body = new SolidBrush(Color.FromArgb(245, 166, 35)))
-                g.FillEllipse(body, bodyRect);
-
-            // black stripes across the body
-            using (var stripe = new SolidBrush(Color.FromArgb(31, 36, 48)))
-            {
-                g.FillEllipse(stripe, new Rectangle(11, 10, 3, 15));
-                g.FillEllipse(stripe, new Rectangle(18, 10, 3, 15));
-            }
-
-            // body outline
-            using (var pen = new Pen(Color.FromArgb(60, 31, 36, 48), 1f))
-                g.DrawEllipse(pen, bodyRect);
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.DrawImage(bmp, 0, 0, size, size);
         }
-
-        IntPtr h = bmp.GetHicon();
-        bmp.Dispose();
+        IntPtr h = scaled.GetHicon();
         return Icon.FromHandle(h);
+    }
+
+    private static Bitmap LoadBeePng()
+    {
+        StreamResourceInfo sri = System.Windows.Application.GetResourceStream(
+            new Uri("pack://application:,,,/bee.png"));
+        using var ms = new MemoryStream();
+        sri.Stream.CopyTo(ms);
+        return new Bitmap(ms);
     }
 }

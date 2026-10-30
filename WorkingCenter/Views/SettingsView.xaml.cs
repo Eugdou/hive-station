@@ -94,5 +94,17 @@ public partial class SettingsView : UserControl
         _vm?.CancelProjectAction();
     }
 
+    // ---- project reorder (up/down icon buttons, click = one slot) ----------
+
+    private void ProjectUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (IdOf(sender) is string id) _vm?.MoveProjectUp(id);
+    }
+
+    private void ProjectDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (IdOf(sender) is string id) _vm?.MoveProjectDown(id);
+    }
+
     private static string? IdOf(object sender) => (sender as FrameworkElement)?.Tag as string;
 }

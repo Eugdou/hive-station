@@ -98,7 +98,10 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
     public ICommand AddTaskCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand ImportCommand { get; }
-    public ICommand ClearCommand { get; }
+    public ICommand ClearCommand { get; }              // opens the inline red confirm
+    public ICommand ConfirmClearCommand { get; }      // executes the actual clear
+    public ICommand CancelClearCommand { get; }
+    public ICommand DismissDataNoticeCommand { get; } // 好的：closes green/red inline notices
     public ICommand ToggleSettingsCommand { get; }
     public ICommand SetEdgeLeftCommand { get; }
     public ICommand SetEdgeRightCommand { get; }
@@ -107,9 +110,8 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
 
     // callbacks the view code-behind hooks (dialog windows). Plain delegates
     // (not events) so the view can assign them directly.
-    public Func<string, string, bool>? RequestConfirm;        // (title, message) -> ok
-    public Func<string, string, System.Collections.Generic.IEnumerable<string>, (bool ok, string? choice)>? RequestConfirmWithChoice;
-    public Action<string>? RequestAlert;     // (message)
+    // (All former RequestConfirm/RequestAlert popup delegates removed —
+    //  every notice is inline now.)
     public Action<EdgePosition>? RequestSetEdge;   // apply edge position (AppState)
 
     // ---- view switching (work <-> settings) -------------------------------
@@ -141,14 +143,47 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
         AddTaskCommand = new RelayCommand(AddTask, () => !string.IsNullOrWhiteSpace(NewTaskTitle));
         ExportCommand = new RelayCommand(Export);
         ImportCommand = new RelayCommand(Import);
-        ClearCommand = new RelayCommand(ClearAll);
+        ClearCommand = new RelayCommand(() => { DataNotice = ""; DataError = ""; IsClearConfirm = true; });
+        ConfirmClearCommand = new RelayCommand(() => { DoClearAll(); });
+        CancelClearCommand = new RelayCommand(() => IsClearConfirm = false);
         ToggleSettingsCommand = new RelayCommand(() =>
             CurrentView = CurrentView == AppView.Settings ? AppView.Work : AppView.Settings);
         SetEdgeLeftCommand = new RelayCommand(() => SetEdge(EdgePosition.Left));
         SetEdgeRightCommand = new RelayCommand(() => SetEdge(EdgePosition.Right));
         SetThemeLightCommand = new RelayCommand(() => SetTheme(WorkingCenter.Views.ThemeService.Theme.Light));
         SetThemeDarkCommand = new RelayCommand(() => SetTheme(WorkingCenter.Views.ThemeService.Theme.Dark));
+        DismissDataNoticeCommand = new RelayCommand(() => { DataNotice = ""; DataError = ""; });
     }
+
+    /// <summary>数据管理的内联提示（绿色，导入/导出成功），空串隐藏，【好的】关闭。</summary>
+    public string DataNotice { get => _dataNotice; set => SetProperty(ref _dataNotice, value); }
+    private string _dataNotice = "";
+
+    /// <summary>数据管理的内联错误（红色，导入/导出失败），空串隐藏，【好的】关闭。</summary>
+    public string DataError { get => _dataError; set => SetProperty(ref _dataError, value); }
+    private string _dataError = "";
+
+    /// <summary>「清除全部」的内联红色二次确认开关（不再弹窗）。</summary>
+    public bool IsClearConfirm { get => _isClearConfirm; set => SetProperty(ref _isClearConfirm, value); }
+    private bool _isClearConfirm;
+
+    private void DoClearAll()
+    {
+        _data.Tasks.Clear();
+        _data.Note.Content = "";
+        _noteContent = "";
+        Raise(nameof(NoteContent));
+        _taskVm.Clear();
+        _editingTaskId = null;
+        PersistImmediately();
+        RebuildGroups();
+        RecomputeEditingAny();
+        IsClearConfirm = false;
+    }
+
+    /// <summary>开机自启失败的内联红字提示，空串隐藏。</summary>
+    public string AutoStartError { get => _autoStartError; set => SetProperty(ref _autoStartError, value); }
+    private string _autoStartError = "";
 
     /// <summary>开机自启开关。注册表 HKCU Run 键持久化，默认关闭；
     /// setter 写注册表，失败则回弹 UI 状态并提示。</summary>
@@ -163,7 +198,7 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
             else
             {
                 Raise(nameof(AutoStartEnabled));   // revert the checkbox
-                RequestAlert?.Invoke(value ? "开机自启设置失败（可能被安全软件拦截）。" : "取消开机自启失败。");
+                AutoStartError = value ? "开机自启设置失败（可能被安全软件拦截）。" : "取消开机自启失败。";
             }
         }
     }
@@ -281,6 +316,43 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
         if (SelectedProject == null || !_projVm.ContainsKey(SelectedProject.Id))
             SelectedProject = Projects.FirstOrDefault();
         RebuildGroups();
+    }
+
+    // ---- reorder projects (settings page up/down arrows) -------------------
+    // Click moves the project one slot; SortOrders are rewritten 0..n-1,
+    // persisted, then RefreshProjects + RebuildGroups propagate to the
+    // dropdown and the grouped todo list.
+
+    /// <summary>Move `id` up one slot (towards the top). No-op at top.</summary>
+    public void MoveProjectUp(string id)
+    {
+        var ordered = _data.Projects.OrderBy(p => p.SortOrder).ToList();
+        int i = ordered.FindIndex(p => p.Id == id);
+        if (i <= 0) return;
+        (ordered[i - 1], ordered[i]) = (ordered[i], ordered[i - 1]);
+        ApplyProjectOrder(ordered);
+    }
+
+    /// <summary>Move `id` down one slot (towards the bottom). No-op at bottom.</summary>
+    public void MoveProjectDown(string id)
+    {
+        var ordered = _data.Projects.OrderBy(p => p.SortOrder).ToList();
+        int i = ordered.FindIndex(p => p.Id == id);
+        if (i < 0 || i >= ordered.Count - 1) return;
+        (ordered[i + 1], ordered[i]) = (ordered[i], ordered[i + 1]);
+        ApplyProjectOrder(ordered);
+    }
+
+    private void ApplyProjectOrder(List<Project> ordered)
+    {
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].SortOrder = i;
+            ordered[i].UpdatedAt = DateTime.UtcNow;
+        }
+        PersistImmediately();
+        RefreshProjects();
+        Logger.Info("Project order changed: " + string.Join(" > ", ordered.Select(p => p.Name)));
     }
 
     // ---- tasks -----------------------------------------------------------
@@ -462,11 +534,11 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             });
             File.WriteAllText(dlg.FileName, json);
-            RequestAlert?.Invoke("已导出备份。");
+            DataNotice = "已导出备份。";
         }
         catch (Exception ex)
         {
-            RequestAlert?.Invoke("导出失败：" + ex.Message);
+            DataError = "导出失败：" + ex.Message;
         }
     }
 
@@ -479,7 +551,7 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
             var json = File.ReadAllText(dlg.FileName);
             if (!DataMigrator.TryImport(json, out var imported, out var error))
             {
-                RequestAlert?.Invoke(error);
+                DataError = error;
                 return;
             }
             // backup current before replacing
@@ -498,11 +570,12 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
                 ? Projects.FirstOrDefault(p => p.Id == _data.SelectedProjectId)
                 : Projects.FirstOrDefault();
             PersistImmediately();
-            RequestAlert?.Invoke($"导入成功：{imported.Projects.Count} 个项目，{imported.Tasks.Count} 条任务。");
+            // success notice shows inline in the settings data card (green, no popup)
+            DataNotice = $"导入成功：{imported.Projects.Count} 个项目，{imported.Tasks.Count} 条任务。";
         }
         catch (Exception ex)
         {
-            RequestAlert?.Invoke("导入失败：" + ex.Message);
+            DataError = "导入失败：" + ex.Message;
         }
     }
 
@@ -520,20 +593,6 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
             }));
         }
         catch { /* best-effort */ }
-    }
-
-    private void ClearAll()
-    {
-        if (RequestConfirm?.Invoke("清除全部", "确定清除全部待办和随手记吗？项目会保留。此操作不可撤销。") != true) return;
-        _data.Tasks.Clear();
-        _data.Note.Content = "";
-        _noteContent = "";
-        Raise(nameof(NoteContent));
-        _taskVm.Clear();
-        _editingTaskId = null;
-        PersistImmediately();
-        RebuildGroups();
-        RecomputeEditingAny();
     }
 
     // ---- persistence -----------------------------------------------------
@@ -574,9 +633,11 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
 
     public bool RenameProject(string id, string name)
     {
+        // validation errors show inline in the rename row (EditError), no popup
+        var vm = _projVm.TryGetValue(id, out var v) ? v : null;
         name = name.Trim();
-        if (string.IsNullOrEmpty(name)) { RequestAlert?.Invoke("项目名称不能为空。"); return false; }
-        if (IsDuplicateName(name, id)) { RequestAlert?.Invoke("项目名称已存在（忽略前后空格）。"); return false; }
+        if (string.IsNullOrEmpty(name)) { if (vm != null) vm.EditError = "项目名称不能为空。"; return false; }
+        if (IsDuplicateName(name, id)) { if (vm != null) vm.EditError = "项目名称已存在（忽略前后空格）。"; return false; }
         var p = _data.Projects.FirstOrDefault(x => x.Id == id);
         if (p == null) return false;
         p.Name = name;
@@ -591,7 +652,7 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
     public void BeginRenameProject(string id)
     {
         ClearProjectActions();
-        if (_projVm.TryGetValue(id, out var vm)) vm.BeginRename();
+        if (_projVm.TryGetValue(id, out var vm)) { vm.EditError = ""; vm.BeginRename(); }
     }
 
     public bool CommitRenameProject(string id)
@@ -611,7 +672,10 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
         var hasTasks = _data.Tasks.Any(t => t.ProjectId == id);
         if (hasTasks && _data.Projects.Count <= 1)
         {
-            RequestAlert?.Invoke("该项目有待办，且没有其他项目可转移。请先处理这些待办或新建一个项目。");
+            // blocked path: show inline red message in the delete row instead of a popup
+            vm.MoveTargets = new();
+            vm.DeleteBlockedMessage = "该项目有待办，且没有其他项目可转移。请先处理这些待办或新建一个项目。";
+            vm.IsDeleteConfirm = true;
             return;
         }
         // Only offer a move-target picker when the project actually has tasks to move.
@@ -639,7 +703,12 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
         {
             var target = _projVm.TryGetValue(id, out var vm) ? vm.MoveTarget : null;
             var targetModel = target != null ? _data.Projects.FirstOrDefault(x => x.Id == target.Id) : null;
-            if (targetModel == null) { RequestAlert?.Invoke("请选择待办转移到的目标项目。"); return; }
+            if (targetModel == null)
+            {
+                // inline red hint instead of a popup
+                if (_projVm.TryGetValue(id, out var v2)) v2.DeleteBlockedMessage = "请选择待办转移到的目标项目。";
+                return;
+            }
             foreach (var t in tasks) { t.ProjectId = targetModel.Id; t.UpdatedAt = DateTime.UtcNow; }
         }
         _data.Projects.Remove(p);
@@ -650,7 +719,13 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
 
     private void ClearProjectActions()
     {
-        foreach (var vm in _projVm.Values) { vm.IsRenameMode = false; vm.IsDeleteConfirm = false; }
+        foreach (var vm in _projVm.Values)
+        {
+            vm.IsRenameMode = false;
+            vm.IsDeleteConfirm = false;
+            vm.EditError = "";
+            vm.DeleteBlockedMessage = "";
+        }
     }
 
     private bool IsDuplicateName(string name, string? excludeId) =>

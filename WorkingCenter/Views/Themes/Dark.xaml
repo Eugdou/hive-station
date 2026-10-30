@@ -23,4 +23,5 @@
     <SolidColorBrush x:Key="DetailBg" Color="#1A1B1D"/>
     <SolidColorBrush x:Key="HeaderBg" Color="#1F2022"/>
     <SolidColorBrush x:Key="PinFill" Color="#2A2B2E"/>
+    <SolidColorBrush x:Key="SuccessSoftBg" Color="#1F3A2A"/>
 </ResourceDictionary>

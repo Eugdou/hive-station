@@ -33,6 +33,10 @@
                         <RadioButton Content="否" Style="{StaticResource Radio}" GroupName="AutoStart"
                                      IsChecked="{Binding AutoStartEnabled, Converter={StaticResource InvertBool}}"/>
                     </StackPanel>
+                    <!-- inline red error (registry blocked etc.), no popup -->
+                    <TextBlock Text="{Binding AutoStartError}" FontSize="11" Foreground="{DynamicResource Danger}"
+                               TextWrapping="Wrap" Margin="0,6,0,0"
+                               Visibility="{Binding AutoStartError, Converter={StaticResource NonEmptyToVis}}"/>
                 </StackPanel>
             </Border>
 
@@ -56,18 +60,44 @@
                     <ItemsControl ItemsSource="{Binding ProjectList}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ProjectViewModel}">
-                                <StackPanel Margin="0,4,0,0">
+                                <StackPanel Margin="0,8,0,0">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <Ellipse Width="9" Height="9" Fill="{Binding DotBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <Ellipse Grid.Column="0" Width="9" Height="9" Fill="{Binding DotBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" FontSize="13" Foreground="{DynamicResource Ink}"/>
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Content="改名" Click="Rename_Click" Tag="{Binding Id}" Style="{StaticResource SecondaryButton}" Padding="8,3" FontSize="11" Margin="0,0,6,0"/>
-                                            <Button Content="删除" Click="Delete_Click" Tag="{Binding Id}" Style="{StaticResource DangerButton}" Padding="8,3" FontSize="11"/>
+                                        <!-- hover to reveal the icon actions, same interaction
+                                             as the todo rows: up/down to reorder, edit, delete -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,0,0">
+                                            <StackPanel.Style>
+                                                <Style TargetType="StackPanel">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Grid}, Path=IsMouseOver}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </StackPanel.Style>
+                                            <Button Style="{StaticResource ActBtn}" Click="ProjectUp_Click" Tag="{Binding Id}" ToolTip="上移">
+                                                <Path Data="{StaticResource UpIcon}" Stroke="{DynamicResource Muted}" StrokeThickness="2"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
+                                            </Button>
+                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="ProjectDown_Click" Tag="{Binding Id}" ToolTip="下移">
+                                                <Path Data="{StaticResource DownIcon}" Stroke="{DynamicResource Muted}" StrokeThickness="2"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
+                                            </Button>
+                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="Rename_Click" Tag="{Binding Id}" ToolTip="改名">
+                                                <Path Data="{StaticResource EditIcon}" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
+                                            </Button>
+                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="Delete_Click" Tag="{Binding Id}" ToolTip="删除">
+                                                <Path Data="{StaticResource DeleteIcon}" Stroke="{DynamicResource Danger}" StrokeThickness="2"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
+                                            </Button>
                                         </StackPanel>
                                     </Grid>
 
@@ -78,6 +108,10 @@
                                             <TextBox Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
                                                      x:Name="RenameBox" Style="{StaticResource Input}" Padding="8,6" FontSize="13"
                                                      KeyDown="RenameBox_KeyDown" Tag="{Binding Id}"/>
+                                            <!-- inline validation error (empty / duplicate name), no popup -->
+                                            <TextBlock Text="{Binding EditError}" FontSize="11" Foreground="{DynamicResource Danger}"
+                                                       Margin="0,6,0,0"
+                                                       Visibility="{Binding EditError, Converter={StaticResource NonEmptyToVis}}"/>
                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                                                 <Button Content="取消" Click="CancelProj_Click" Tag="{Binding Id}" Style="{StaticResource SecondaryButton}" Padding="10,4" FontSize="11" Margin="0,0,6,0"/>
                                                 <Button Content="保存" Click="SaveRename_Click" Tag="{Binding Id}" Style="{StaticResource AccentButton}" Padding="10,4" FontSize="11"/>
@@ -93,6 +127,10 @@
                                         <StackPanel>
                                             <TextBlock Text="确定删除该项目？" FontSize="12" Foreground="{DynamicResource Danger}" Margin="0,0,0,8"
                                                        Visibility="{Binding HasMoveTargets, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"/>
+                                            <!-- inline red blocked-delete / missing-target hint (no popup) -->
+                                            <TextBlock Text="{Binding DeleteBlockedMessage}" FontSize="11" Foreground="{DynamicResource Danger}"
+                                                       TextWrapping="Wrap" Margin="0,0,0,8"
+                                                       Visibility="{Binding DeleteBlockedMessage, Converter={StaticResource NonEmptyToVis}}"/>
                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
                                                         Visibility="{Binding HasMoveTargets, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="待办转移到：" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Danger}" Margin="0,0,6,0"/>
@@ -127,7 +165,7 @@
                 </StackPanel>
             </Border>
 
-            <!-- 4. 数据管理 -->
+            <!-- 5. 数据管理 -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Text="数据管理" Style="{StaticResource SectionLabel}"/>
@@ -140,8 +178,45 @@
                         <Button Grid.Column="0" Content="导出 JSON" Command="{Binding ExportCommand}" Style="{StaticResource SecondaryButton}"/>
                         <Button Grid.Column="1" Content="导入 JSON" Command="{Binding ImportCommand}" Style="{StaticResource SecondaryButton}"
                                 HorizontalAlignment="Center"/>
-                        <Button Grid.Column="2" Content="清除全部" Command="{Binding ClearCommand}" Style="{StaticResource DangerButton}"/>
+                        <Button Grid.Column="2" Content="清除全部" Command="{Binding ClearCommand}" Style="{StaticResource AccentButton}"/>
                     </Grid>
+                    <!-- inline green notice (import/export success), no popup -->
+                    <Border Visibility="{Binding DataNotice, Converter={StaticResource NonEmptyToVis}}"
+                            Background="{DynamicResource SuccessSoftBg}" CornerRadius="6" Padding="10,8" Margin="0,8,0,0"
+                            BorderBrush="{DynamicResource Done}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DataNotice}" FontSize="12" Foreground="{DynamicResource Done}"
+                                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <Button Content="好的" Command="{Binding DismissDataNoticeCommand}" Style="{StaticResource SuccessSolidButton}"
+                                    Padding="10,4" FontSize="11" HorizontalAlignment="Right"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- inline red error notice (import/export failure), no popup -->
+                    <Border Visibility="{Binding DataError, Converter={StaticResource NonEmptyToVis}}"
+                            Background="{DynamicResource DangerSoftBg}" CornerRadius="6" Padding="10,8" Margin="0,8,0,0"
+                            BorderBrush="{DynamicResource Danger}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DataError}" FontSize="12" Foreground="{DynamicResource Danger}"
+                                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <Button Content="好的" Command="{Binding DismissDataNoticeCommand}" Style="{StaticResource DangerSolidButton}"
+                                    Padding="10,4" FontSize="11" HorizontalAlignment="Right"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- inline clear confirm (was a popup), mirrors task delete -->
+                    <Border Visibility="{Binding IsClearConfirm, Converter={StaticResource BoolToVis}}"
+                            Background="{DynamicResource DangerSoftBg}" CornerRadius="6" Padding="10,8" Margin="0,8,0,0"
+                            BorderBrush="{DynamicResource Danger}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="确定清除全部待办和随手记吗？项目会保留。此操作不可撤销。" FontSize="12"
+                                       Foreground="{DynamicResource Danger}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="取消" Command="{Binding CancelClearCommand}" Style="{StaticResource SecondaryButton}"
+                                        Padding="10,4" FontSize="11" Margin="0,0,6,0"/>
+                                <Button Content="确认清除" Command="{Binding ConfirmClearCommand}" Style="{StaticResource DangerSolidButton}"
+                                        Padding="10,4" FontSize="11"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
         </StackPanel>

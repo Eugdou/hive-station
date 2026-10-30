@@ -21,7 +21,6 @@ public partial class Workspace : UserControl
             if (_vm != null)
             {
                 _vm.PropertyChanged += Vm_PropertyChanged;
-                WireDialogs();
             }
         };
     }
@@ -47,15 +46,5 @@ public partial class Workspace : UserControl
     {
         if (sender is TextBox tb && tb.DataContext is TodoTaskViewModel tvm && tvm.IsEditing)
             tvm.CommitEditCommand.Execute(null);
-    }
-
-    // ---- bridge VM dialog requests to real WPF dialogs -------------------
-    private void WireDialogs()
-    {
-        _vm!.RequestConfirm = (title, msg) => ConfirmDialog.Show(title, msg);
-        _vm.RequestConfirmWithChoice = (title, msg, choices) => ConfirmDialog.ShowWithChoice(title, msg, choices);
-        _vm.RequestAlert = msg => ConfirmDialog.Show("提示", msg);
-        // Project management now lives in the settings page (no popup), so
-        // RequestOpenProjectManager is unused here.
     }
 }
