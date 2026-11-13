@@ -1,7 +1,5 @@
 using System.IO;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using WorkingCenter.Core;
 using WorkingCenter.Models;
 
@@ -16,7 +14,7 @@ namespace WorkingCenter.Data;
 ///    hive-station.json.prev, so if the new write is somehow unusable we still
 ///    have the last good snapshot.
 ///  - Crash recovery on Load: if the main file fails to parse, fall back to
-///    .prev, then to the newest backup in data/backups, then to seeded defaults.
+///    .prev, then backups from newest to oldest, then to seeded defaults.
 ///  - Schema versioning: older snapshots are migrated to the current schema
 ///    through a chain of migration functions before use.
 ///  - Periodic auto-backup: every N saves, also copy into data/backups/.
@@ -33,15 +31,10 @@ internal sealed class JsonStore : IStore
     private readonly string _prevPath;   // hive-station.json.prev (last good)
     private readonly string _tmp;        // hive-station.json.tmp (in-flight write)
     private int _savesSinceBackup;
+    private bool _mainFileUsable;
     private const int AutoBackupEvery = 50;
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        // Keep Chinese characters as UTF-8 in the file (not \uXXXX) — readable exports.
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
+    public string LoadNotice { get; private set; } = "";
 
     public JsonStore()
     {
@@ -56,14 +49,31 @@ internal sealed class JsonStore : IStore
     {
         Directory.CreateDirectory(_dir);
 
-        // Try the main file, then the .prev backup, then the newest backup,
-        // then seeded defaults. After any successful parse we migrate the schema.
-        if (TryLoadFile(_path, out var data, out var err1)) return Migrate(data);
+        LoadNotice = "";
+        _mainFileUsable = false;
+        if (TryLoadFile(_path, out var data, out var err1))
+        {
+            _mainFileUsable = true;
+            return Migrate(data);
+        }
         Logger.Info($"JsonStore: main file unusable ({err1}); trying .prev");
-        if (File.Exists(_prevPath) && TryLoadFile(_prevPath, out data, out _)) return Migrate(data);
-        Logger.Info("JsonStore: .prev unusable/missing; trying newest backup");
-        var backup = NewestBackup();
-        if (backup != null && TryLoadFile(backup, out data, out _)) return Migrate(data);
+        if (File.Exists(_prevPath) && TryLoadFile(_prevPath, out data, out _))
+        {
+            LoadNotice = "主数据文件无法读取，已从上一份快照恢复。";
+            return Migrate(data);
+        }
+        Logger.Info("JsonStore: .prev unusable/missing; trying backups from newest to oldest");
+        var backups = BackupCandidates();
+        foreach (var backup in backups)
+        {
+            if (!TryLoadFile(backup, out data, out _)) continue;
+            LoadNotice = $"主数据文件无法读取，已从备份 {Path.GetFileName(backup)} 恢复。";
+            Logger.Info($"JsonStore: recovered from {Path.GetFileName(backup)}");
+            return Migrate(data);
+        }
+
+        if (File.Exists(_path) || File.Exists(_prevPath) || backups.Length > 0)
+            LoadNotice = "数据文件及现有备份均无法读取，当前显示默认数据。请检查备份后再继续编辑。";
 
         Logger.Info("JsonStore: no usable data, seeding defaults");
         return AppData.CreateDefault();
@@ -77,16 +87,17 @@ internal sealed class JsonStore : IStore
             snapshot.SchemaVersion = AppData.CurrentSchemaVersion;
 
             // 1. keep the last good file as .prev before overwriting
-            if (File.Exists(_path))
+            if (_mainFileUsable && File.Exists(_path))
             {
                 try { File.Copy(_path, _prevPath, overwrite: true); }
                 catch { /* best-effort; the atomic move below still protects us */ }
             }
 
             // 2. write to a temp file, then atomically move into place
-            var json = JsonSerializer.Serialize(snapshot, Options);
+            var json = JsonSerializer.Serialize(snapshot, SnapshotJson.Options);
             File.WriteAllText(_tmp, json);
             File.Move(_tmp, _path, overwrite: true);   // atomic on NTFS same volume
+            _mainFileUsable = true;
 
             // 3. periodic auto-backup
             if (++_savesSinceBackup >= AutoBackupEvery)
@@ -98,6 +109,7 @@ internal sealed class JsonStore : IStore
         catch (Exception ex)
         {
             Logger.Info($"JsonStore: save failed ({ex.Message})");
+            throw;
         }
     }
 
@@ -132,18 +144,22 @@ internal sealed class JsonStore : IStore
         catch { }
     }
 
-    private string? NewestBackup()
+    private string[] BackupCandidates()
     {
         try
         {
-            if (!Directory.Exists(_backupsDir)) return null;
+            if (!Directory.Exists(_backupsDir)) return Array.Empty<string>();
             return Directory.GetFiles(_backupsDir, "*.json")
                 .Select(f => new FileInfo(f))
                 .OrderByDescending(f => f.CreationTime)
                 .Select(f => f.FullName)
-                .FirstOrDefault();
+                .ToArray();
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            Logger.Info($"JsonStore: backup enumeration failed ({ex.Message})");
+            return Array.Empty<string>();
+        }
     }
 
     private static bool TryLoadFile(string path, out AppData data, out string error)
@@ -154,10 +170,11 @@ internal sealed class JsonStore : IStore
         {
             if (!File.Exists(path)) { error = "not found"; return false; }
             var json = File.ReadAllText(path);
-            var parsed = JsonSerializer.Deserialize<AppData>(json, Options);
+            var parsed = JsonSerializer.Deserialize<AppData>(json, SnapshotJson.Options);
             if (parsed == null) { error = "empty/null"; return false; }
             parsed.Projects ??= new();
             parsed.Tasks ??= new();
+            parsed.Reminders ??= new();
             parsed.Note ??= new QuickNote { Id = "main", Content = "", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
             data = parsed;
             return true;

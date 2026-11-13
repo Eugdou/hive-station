@@ -1,7 +1,6 @@
-using System.IO;
-using System.Text.Json;
 using System.Windows;
 using WorkingCenter.Core;
+using WorkingCenter.Data;
 using Application = System.Windows.Application;
 
 namespace WorkingCenter.Views;
@@ -33,40 +32,13 @@ internal static class ThemeService
     }
 
     /// <summary>Persist the theme choice alongside the edge setting.</summary>
-    public static void Save(Theme theme)
-    {
-        try
-        {
-            var path = Path.Combine(AppContext.BaseDirectory, "data", "settings.json");
-            var dir = Path.GetDirectoryName(path)!;
-            Directory.CreateDirectory(dir);
-            var edge = "";
-            if (File.Exists(path))
-            {
-                using var doc = JsonDocument.Parse(File.ReadAllText(path));
-                if (doc.RootElement.TryGetProperty("edge", out var e) && e.ValueKind == JsonValueKind.String)
-                    edge = e.GetString() ?? "";
-            }
-            File.WriteAllText(path, $"{{\"edge\":\"{edge}\",\"theme\":\"{theme}\"}}");
-        }
-        catch { /* best-effort */ }
-    }
+    public static void Save(Theme theme) => SettingsStore.SetValue("theme", theme.ToString());
 
     /// <summary>Load the persisted theme (default Light).</summary>
     public static Theme Load()
     {
-        try
-        {
-            var path = Path.Combine(AppContext.BaseDirectory, "data", "settings.json");
-            if (File.Exists(path))
-            {
-                using var doc = JsonDocument.Parse(File.ReadAllText(path));
-                if (doc.RootElement.TryGetProperty("theme", out var t) && t.ValueKind == JsonValueKind.String
-                    && Enum.TryParse<Theme>(t.GetString(), true, out var parsed))
-                    return parsed;
-            }
-        }
-        catch { }
+        if (Enum.TryParse<Theme>(SettingsStore.GetValue("theme"), true, out var parsed)
+            && Enum.IsDefined(parsed)) return parsed;
         return Theme.Light;
     }
 }

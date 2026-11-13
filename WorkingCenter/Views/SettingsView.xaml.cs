@@ -106,5 +106,39 @@ public partial class SettingsView : UserControl
         if (IdOf(sender) is string id) _vm?.MoveProjectDown(id);
     }
 
+    // ---- reminders (inline add/edit/delete, no popups) ----------------------
+
+    private void AddRem_Click(object sender, RoutedEventArgs e) => _vm?.TryAddReminderFromForm();
+
+    private void NewRemTime_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) _vm?.TryAddReminderFromForm();
+    }
+
+    private void RemEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm != null && IdOf(sender) is string id) _vm.BeginEditReminderById(id);
+    }
+
+    private void RemSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm != null && IdOf(sender) is string id) _vm.CommitEditReminderById(id);
+    }
+
+    private void RemCancel_Click(object sender, RoutedEventArgs e)
+    {
+        _vm?.CancelReminderActionById();
+    }
+
+    private void RemDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm != null && IdOf(sender) is string id) _vm.BeginDeleteReminderById(id);
+    }
+
+    private void RemConfirmDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm != null && IdOf(sender) is string id) _vm.CommitDeleteReminderById(id);
+    }
+
     private static string? IdOf(object sender) => (sender as FrameworkElement)?.Tag as string;
 }

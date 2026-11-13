@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   >
     <!-- ============ theme tokens (DynamicResource so theme swap restyles all) ============
          These keys are overridden by Themes/Light.xaml or Themes/Dark.xaml merged
          AFTER this dictionary. Defaults here are the LIGHT values so the app still
@@ -218,6 +219,7 @@
         <Setter Property="Padding" Value="8,5"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="MaxDropDownHeight" Value="280"/>
         <Setter Property="ItemContainerStyle">
             <Setter.Value>
                 <Style TargetType="ComboBoxItem">
@@ -275,8 +277,11 @@
                                AllowsTransparency="True" PopupAnimation="Fade" Focusable="False">
                             <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource CardBorder}"
                                     BorderThickness="1" CornerRadius="6" Padding="4" MinWidth="{TemplateBinding ActualWidth}" Margin="0,4,0,0">
-                                <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
-                                    <StackPanel><ItemsPresenter/></StackPanel>
+                                <!-- Keep ItemsPresenter as the direct scroll content so WPF counts each list item. -->
+                                <ScrollViewer x:Name="DropDownScrollViewer" MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                              CanContentScroll="True" HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto" Focusable="False">
+                                    <ItemsPresenter x:Name="ItemsPresenter" KeyboardNavigation.DirectionalNavigation="Contained"/>
                                 </ScrollViewer>
                             </Border>
                         </Popup>

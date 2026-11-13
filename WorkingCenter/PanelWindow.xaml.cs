@@ -45,6 +45,7 @@ public partial class PanelWindow : Window
         _vm.RequestSetEdge = edge => _state.SetEdge(edge);
         _vm.InitEdge(_state.Edge);
         _vm.InitTheme(ThemeService.Current);
+        _vm.RequestNotify = msg => _state.ShowReminderToast(msg);
 
         // Toggle the settings icon between gear (-> open) and back arrow (-> close).
         _vm.PropertyChanged += (_, e) =>

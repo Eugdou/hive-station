@@ -11,7 +11,11 @@ internal interface IStore
     /// <summary>Returns the persisted snapshot, or a seeded default on first run.</summary>
     AppData Load();
 
+    /// <summary>Recovery information to surface to the user after loading.</summary>
+    string LoadNotice { get; }
+
     /// <summary>Atomic full-snapshot persist. Implementations must not corrupt the
-    /// previous good file on a partial write.</summary>
+    /// previous good file on a partial write. Failures must propagate to the
+    /// caller so pending edits are retained and can be retried.</summary>
     void Save(AppData snapshot);
 }

@@ -22,13 +22,15 @@ namespace WorkingCenter.ViewModels;
 /// <summary>Which top-level view the panel shows.</summary>
 public enum AppView { Work, Settings }
 
-internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
+internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost, IReminderHost
 {
     private readonly IStore _store;
     private readonly AppData _data;
 
     private readonly DispatcherTimer _debounce;
     private readonly DispatcherTimer _maxWait;
+    private readonly DispatcherTimer _retrySave;
+    private bool _savePending;
     private bool _noteDirty;
     private string? _detailDirtyId;   // id of the task whose detail has unsaved edits
 
@@ -45,6 +47,9 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
 
     private string _saveStatus = "已保存";
     public string SaveStatus { get => _saveStatus; set => SetProperty(ref _saveStatus, value); }
+
+    private string _storageNotice = "";
+    public string StorageNotice { get => _storageNotice; private set => SetProperty(ref _storageNotice, value); }
 
     private string _newTaskTitle = "";
     public string NewTaskTitle { get => _newTaskTitle; set => SetProperty(ref _newTaskTitle, value); }
@@ -126,19 +131,24 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
     {
         _store = store;
         _data = store.Load();
+        StorageNotice = store.LoadNotice;
 
         _noteContent = _data.Note.Content;
 
         _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _maxWait = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+        _retrySave = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _debounce.Tick += (_, _) => FlushNow();
         _maxWait.Tick += (_, _) => FlushNow();
+        _retrySave.Tick += (_, _) => FlushNow();
 
         BuildProjectVms();
         RebuildGroups();
-        SelectedProject = _data.SelectedProjectId != null
-            ? Projects.FirstOrDefault(p => p.Id == _data.SelectedProjectId)
-            : Projects.FirstOrDefault();
+        // Loading a selection must not write an unnormalized snapshot back to disk.
+        _selectedProject = Projects.FirstOrDefault(p => p.Id == _data.SelectedProjectId)
+            ?? Projects.FirstOrDefault();
+        var selectionChanged = _data.SelectedProjectId != _selectedProject?.Id;
+        _data.SelectedProjectId = _selectedProject?.Id;
 
         AddTaskCommand = new RelayCommand(AddTask, () => !string.IsNullOrWhiteSpace(NewTaskTitle));
         ExportCommand = new RelayCommand(Export);
@@ -153,6 +163,14 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
         SetThemeLightCommand = new RelayCommand(() => SetTheme(WorkingCenter.Views.ThemeService.Theme.Light));
         SetThemeDarkCommand = new RelayCommand(() => SetTheme(WorkingCenter.Views.ThemeService.Theme.Dark));
         DismissDataNoticeCommand = new RelayCommand(() => { DataNotice = ""; DataError = ""; });
+
+        // reminders: normalize stale triggers, build list, start the 30s scheduler
+        var remindersChanged = NormalizeReminders();
+        RebuildReminderList();
+        if (selectionChanged || remindersChanged) PersistImmediately();
+        _reminderTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _reminderTimer.Tick += OnReminderTick;
+        _reminderTimer.Start();
     }
 
     /// <summary>数据管理的内联提示（绿色，导入/导出成功），空串隐藏，【好的】关闭。</summary>
@@ -245,23 +263,9 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
     /// task's detail. Called by the timer tick and by all external flushers.</summary>
     public void FlushNow()
     {
-        if (!_noteDirty && _detailDirtyId == null) return;
+        if (!_savePending && !_noteDirty && _detailDirtyId == null) return;
         _debounce.Stop(); _maxWait.Stop();
-
-        if (_noteDirty)
-        {
-            _data.Note.Content = _noteContent;
-            _data.Note.UpdatedAt = DateTime.UtcNow;
-            _noteDirty = false;
-            SaveStatus = "已保存 " + DateTime.Now.ToString("HH:mm:ss");
-        }
-
-        var detailId = _detailDirtyId;
-        _detailDirtyId = null;
-        _store.Save(_data);   // single atomic snapshot save (covers notes + detail)
-
-        if (detailId != null && _taskVm.TryGetValue(detailId, out var tvm))
-            tvm.DetailStatus = "已保存 " + DateTime.Now.ToString("HH:mm:ss");
+        PersistImmediately();
     }
 
     // ---- projects --------------------------------------------------------
@@ -525,14 +529,11 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
                 note = _data.Note,
                 projects = _data.Projects,
                 tasks = _data.Tasks,
+                reminders = _data.Reminders,
                 selectedProjectId = _data.SelectedProjectId,
                 exportedAt = DateTime.UtcNow,
             };
-            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            });
+            var json = JsonSerializer.Serialize(snapshot, SnapshotJson.Options);
             File.WriteAllText(dlg.FileName, json);
             DataNotice = "已导出备份。";
         }
@@ -554,24 +555,41 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
                 DataError = error;
                 return;
             }
-            // backup current before replacing
+            // Preserve pending note/detail edits before backing up the old snapshot.
+            FlushNow();
+            if (_savePending)
+            {
+                DataError = "当前修改尚未保存，导入已取消。请先解决保存错误后重试。";
+                return;
+            }
             BackupCurrent();
+            DataNotice = "";
+            DataError = "";
+            _debounce.Stop(); _maxWait.Stop(); _retrySave.Stop();
             _data.Projects = imported.Projects;
             _data.Tasks = imported.Tasks;
+            _data.Reminders = imported.Reminders;
             _data.Note = imported.Note;
             _data.SelectedProjectId = imported.SelectedProjectId ?? imported.Projects.FirstOrDefault()?.Id;
             _noteContent = _data.Note.Content;
+            _noteDirty = false;
+            _detailDirtyId = null;
+            _editingTaskId = null;
             Raise(nameof(NoteContent));
 
             _taskVm.Clear();
             BuildProjectVms();
             RebuildGroups();
-            SelectedProject = _data.SelectedProjectId != null
-                ? Projects.FirstOrDefault(p => p.Id == _data.SelectedProjectId)
-                : Projects.FirstOrDefault();
-            PersistImmediately();
-            // success notice shows inline in the settings data card (green, no popup)
-            DataNotice = $"导入成功：{imported.Projects.Count} 个项目，{imported.Tasks.Count} 条任务。";
+            _reminderVm.Clear();
+            NormalizeReminders();
+            RebuildReminderList();
+            _selectedProject = Projects.FirstOrDefault(p => p.Id == _data.SelectedProjectId)
+                ?? Projects.FirstOrDefault();
+            _data.SelectedProjectId = _selectedProject?.Id;
+            Raise(nameof(SelectedProject));
+            RecomputeEditingAny();
+            if (PersistImmediately())
+                DataNotice = $"导入成功：{_data.Projects.Count} 个项目，{_data.Tasks.Count} 条任务，{_data.Reminders.Count} 条提醒。";
         }
         catch (Exception ex)
         {
@@ -581,25 +599,356 @@ internal sealed class WorkspaceViewModel : ViewModelBase, ITaskHost
 
     private void BackupCurrent()
     {
-        try
-        {
-            var dir = Path.Combine(AppContext.BaseDirectory, "data", "backups");
-            Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, "pre-import-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
-            File.WriteAllText(path, JsonSerializer.Serialize(_data, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            }));
-        }
-        catch { /* best-effort */ }
+        var dir = Path.Combine(AppContext.BaseDirectory, "data", "backups");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "pre-import-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff")
+            + "-" + Guid.NewGuid().ToString("N") + ".json");
+        // Let Import report a failure instead of replacing data without a backup.
+        File.WriteAllText(path, JsonSerializer.Serialize(_data, SnapshotJson.Options));
     }
+
+    // ---- reminders (system toast via tray balloon) -------------------------
+    // Reminders live in the same AppData snapshot (schema v3), so they inherit
+    // the atomic-write/.prev/recovery chain and ride the existing export/import.
+    // The scheduler ticks every 30s on the UI thread; firing mutates the model
+    // through the VM so there stays exactly one writer to the snapshot.
+
+    public Action<string>? RequestNotify;   // wired by PanelWindow -> AppState tray balloon
+
+    public ObservableCollection<ReminderItemViewModel> ReminderList { get; } = new();
+    private readonly Dictionary<string, ReminderItemViewModel> _reminderVm = new();
+
+    private readonly DispatcherTimer _reminderTimer;
+
+    // ---- new-reminder form state ----
+    private string _newReminderTitle = "";
+    public string NewReminderTitle { get => _newReminderTitle; set => SetProperty(ref _newReminderTitle, value); }
+
+    private int _newReminderTypeIndex;   // 0=单次 1=每日 2=每周 3=每月
+    public int NewReminderTypeIndex
+    {
+        get => _newReminderTypeIndex;
+        set
+        {
+            if (SetProperty(ref _newReminderTypeIndex, value))
+            {
+                // 切到"单次"且日期为空时预填当天，避免空白无从下手
+                if (value == 0 && string.IsNullOrWhiteSpace(NewReminderDateText))
+                    NewReminderDateText = DateTime.Now.ToString("yyyy-MM-dd");
+                if (value == 2 && NewReminderDay > 7) NewReminderDay = 1;
+                RaiseNewFormVis();
+            }
+        }
+    }
+    public bool NewFormIsOnce => NewReminderTypeIndex == 0;
+    public bool NewFormIsDaily => NewReminderTypeIndex == 1;
+    public bool NewFormIsWeekly => NewReminderTypeIndex == 2;
+    public bool NewFormIsMonthly => NewReminderTypeIndex == 3;
+    private void RaiseNewFormVis()
+    {
+        Raise(nameof(NewFormIsOnce));
+        Raise(nameof(NewFormIsDaily));
+        Raise(nameof(NewFormIsWeekly));
+        Raise(nameof(NewFormIsMonthly));
+    }
+
+    private string _newReminderDateText = DateTime.Now.ToString("yyyy-MM-dd");
+    public string NewReminderDateText { get => _newReminderDateText; set => SetProperty(ref _newReminderDateText, value); }
+
+    private string _newReminderTimeText = DateTime.Now.ToString("HH:mm");
+    public string NewReminderTimeText { get => _newReminderTimeText; set => SetProperty(ref _newReminderTimeText, value); }
+
+    private int _newReminderDay = 1;   // 周一=1..7 / 几号 1..31
+    public int NewReminderDay
+    {
+        get => _newReminderDay;
+        set
+        {
+            if (SetProperty(ref _newReminderDay, Math.Clamp(value, 1, 31)))
+                Raise(nameof(NewFormDayIndex));
+        }
+    }
+
+    /// <summary>新建表单周几/几号 ComboBox 的 SelectedIndex（0 起）。</summary>
+    public int NewFormDayIndex
+    {
+        get => NewReminderDay - 1;
+        set { if (value >= 0) NewReminderDay = value + 1; }
+    }
+
+    private string _addReminderError = "";
+    public string AddReminderError { get => _addReminderError; set => SetProperty(ref _addReminderError, value); }
+
+    /// <summary>新建提醒（设置页表单）。校验失败显示行内红字，不弹窗。</summary>
+    public void AddReminder()
+    {
+        var title = NewReminderTitle.Trim();
+        if (title.Length == 0) { AddReminderError = "提醒内容不能为空。"; return; }
+
+        // 防呆归一化：中文冒号 / 缺前导零 / 930 式输入都能转成规范 HH:mm
+        if (!ReminderRules.TryNormalizeTime(NewReminderTimeText, out var normTime, out _))
+        { AddReminderError = "时间格式不正确，应为 HH:mm（如 09:30）。"; return; }
+        NewReminderTimeText = normTime;   // 表单同步显示规范格式
+
+        var rec = (ReminderRecurrence)NewReminderTypeIndex;
+        var normDate = NewReminderDateText;
+        if (rec == ReminderRecurrence.Once)
+        {
+            if (!ReminderRules.TryNormalizeDate(NewReminderDateText, out normDate, out _))
+            { AddReminderError = "日期格式不正确，应为 yyyy-MM-dd（如 2026-12-31）。"; return; }
+            NewReminderDateText = normDate;
+        }
+
+        var now = DateTime.UtcNow;
+        var r = new Reminder
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Title = title,
+            Recurrence = rec,
+            Time = normTime,
+            OnceDate = normDate,
+            Day = NewReminderDay,
+            Enabled = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        r.NextTriggerAt = ComputeTrigger(r, DateTime.Now);
+
+        _data.Reminders.Add(r);
+        AddReminderError = "";
+        NewReminderTitle = "";
+        NewReminderDateText = DateTime.Now.ToString("yyyy-MM-dd");   // 下一条单次提醒默认当天
+        NewReminderTimeText = DateTime.Now.ToString("HH:mm");        // 下一条默认当前时间
+        PersistImmediately();
+        RebuildReminderList();
+        Logger.Info($"Reminder added: {ReminderRules.Describe(r)} «{title}»");
+    }
+
+    private static DateTime ComputeTrigger(Reminder r, DateTime from)
+        => r.Recurrence == ReminderRecurrence.Once
+            ? ReminderRules.NextOnce(r, from)
+            : ReminderRules.NextTrigger(r, from);
+
+    /// <summary>Compute missing triggers, discard expired one-off reminders and
+    /// advance recurring reminders to the catch-up window.</summary>
+    private bool NormalizeReminders()
+    {
+        var now = DateTime.Now;
+        bool changed = false;
+        foreach (var r in _data.Reminders.ToList())
+        {
+            // OnceDate/Time are authoritative, including snapshots previously
+            // affected by the old "now + 100 years" normalization.
+            if (r.Recurrence == ReminderRecurrence.Once || r.NextTriggerAt == default)
+            {
+                var next = ComputeTrigger(r, now);
+                if (r.NextTriggerAt != next) { r.NextTriggerAt = next; changed = true; }
+            }
+            if (!r.Enabled) continue;
+            if (r.Recurrence == ReminderRecurrence.Once)
+            {
+                if (r.NextTriggerAt < now - ReminderRules.CatchUpWindow)
+                {
+                    _data.Reminders.Remove(r);
+                    changed = true;
+                }
+                continue;
+            }
+            while (r.NextTriggerAt < now - ReminderRules.CatchUpWindow)
+            {
+                r.NextTriggerAt = ComputeTrigger(r, r.NextTriggerAt.AddSeconds(1));
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private void RebuildReminderList()
+    {
+        var live = new HashSet<string>(_data.Reminders.Select(x => x.Id));
+        foreach (var dead in _reminderVm.Keys.Except(live).ToList()) _reminderVm.Remove(dead);
+
+        ReminderList.Clear();
+        foreach (var r in _data.Reminders)
+        {
+            if (!_reminderVm.TryGetValue(r.Id, out var vm))
+            {
+                vm = new ReminderItemViewModel(r, this);
+                _reminderVm[r.Id] = vm;
+            }
+            ReminderList.Add(vm);
+        }
+    }
+
+    // ---- IReminderHost (inline edit / delete / toggle, no popups) ----------
+
+    void IReminderHost.BeginEditReminder(ReminderItemViewModel item)
+    {
+        ClearReminderActions();
+        item.BeginEdit();
+    }
+
+    void IReminderHost.OnReminderItemToggled(ReminderItemViewModel item)
+    {
+        var r = item.Model;
+        r.Enabled = item.IsEnabled;
+        r.UpdatedAt = DateTime.UtcNow;
+        if (r.Enabled) r.NextTriggerAt = ComputeTrigger(r, DateTime.Now);   // 启用时重算，避免拿旧值立即触发
+        PersistImmediately();
+        Logger.Info($"Reminder {(r.Enabled ? "enabled" : "disabled")}: «{r.Title}»");
+    }
+
+    void IReminderHost.DeleteReminderItem(ReminderItemViewModel item)
+    {
+        ClearReminderActions();
+        item.IsDeleteConfirm = true;
+    }
+
+    void IReminderHost.CommitDeleteReminder(string id)
+    {
+        _data.Reminders.RemoveAll(x => x.Id == id);
+        PersistImmediately();
+        RebuildReminderList();
+        Logger.Info($"Reminder deleted: {id}");
+    }
+
+    void IReminderHost.CancelReminderAction() => ClearReminderActions();
+
+    private void ClearReminderActions()
+    {
+        foreach (var vm in _reminderVm.Values) { vm.IsEditing = false; vm.IsDeleteConfirm = false; }
+    }
+
+    string IReminderHost.CommitEditReminder(ReminderItemViewModel item)
+    {
+        var r = item.Model;
+        var title = item.EditTitle.Trim();
+        if (title.Length == 0) { item.EditError = "提醒内容不能为空。"; return item.EditError; }
+
+        // 防呆归一化（同新建表单）
+        if (!ReminderRules.TryNormalizeTime(item.EditTime, out var normTime, out _))
+        { item.EditError = "时间格式不正确，应为 HH:mm。"; return item.EditError; }
+        item.EditTime = normTime;
+
+        var normDate = item.EditDate;
+        if (r.Recurrence == ReminderRecurrence.Once)
+        {
+            if (!ReminderRules.TryNormalizeDate(item.EditDate, out normDate, out _))
+            { item.EditError = "日期格式不正确，应为 yyyy-MM-dd。"; return item.EditError; }
+            item.EditDate = normDate;
+        }
+
+        r.Title = title;
+        r.Time = normTime;
+        r.OnceDate = normDate;
+        r.Day = item.EditDay;
+        r.NextTriggerAt = ComputeTrigger(r, DateTime.Now);
+        r.UpdatedAt = DateTime.UtcNow;
+        item.IsEditing = false;
+        item.RefreshDisplay();
+        // 行描述基于模型，重建以刷新 Label 绑定
+        RebuildReminderList();
+        PersistImmediately();
+        Logger.Info($"Reminder updated: {ReminderRules.Describe(r)}");
+        return "";
+    }
+
+    // ---- scheduler ---------------------------------------------------------
+
+    private void OnReminderTick(object? sender, EventArgs e)
+    {
+        var now = DateTime.Now;
+        var due = _data.Reminders.Where(r => r.Enabled && r.NextTriggerAt <= now).ToList();
+        foreach (var r in due) FireReminder(r, now);
+    }
+
+    private void FireReminder(Reminder r, DateTime now)
+    {
+        var dueAt = r.NextTriggerAt;
+        var withinCatchUp = (now - dueAt) <= ReminderRules.CatchUpWindow;
+
+        if (r.Recurrence == ReminderRecurrence.Once)
+            _data.Reminders.Remove(r);
+        else
+            r.NextTriggerAt = ReminderRules.NextTrigger(r, now);
+        r.UpdatedAt = DateTime.UtcNow;
+
+        PersistImmediately();
+        RebuildReminderList();
+
+        if (withinCatchUp)
+        {
+            var text = r.Title.Length > 255 ? r.Title[..255] : r.Title;
+            RequestNotify?.Invoke(text);
+            Logger.Info($"Reminder FIRED: «{r.Title}» ({ReminderRules.Describe(r)})");
+        }
+        else
+        {
+            Logger.Info($"Reminder skipped silently (missed by {(now - dueAt).TotalMinutes:F0} min): «{r.Title}»");
+        }
+    }
+
+    // ---- public wrappers for the settings-page code-behind -----------------
+
+    public void BeginEditReminderById(string id)
+    {
+        if (_reminderVm.TryGetValue(id, out var vm)) ((IReminderHost)this).BeginEditReminder(vm);
+    }
+
+    public void CommitEditReminderById(string id)
+    {
+        if (_reminderVm.TryGetValue(id, out var vm)) ((IReminderHost)this).CommitEditReminder(vm);
+    }
+
+    public void BeginDeleteReminderById(string id)
+    {
+        if (_reminderVm.TryGetValue(id, out var vm)) ((IReminderHost)this).DeleteReminderItem(vm);
+    }
+
+    public void CommitDeleteReminderById(string id) => ((IReminderHost)this).CommitDeleteReminder(id);
+
+    public void CancelReminderActionById() => ClearReminderActions();
+
+    public void ToggleReminderEnabledById(string id)
+    {
+        if (_reminderVm.TryGetValue(id, out var vm)) ((IReminderHost)this).OnReminderItemToggled(vm);
+    }
+
+    /// <summary>新建提醒行的时间框回车 = 添加。</summary>
+    public void TryAddReminderFromForm() => AddReminder();
 
     // ---- persistence -----------------------------------------------------
 
-    private void PersistImmediately()
+    private bool PersistImmediately()
     {
-        _store.Save(_data);
+        _savePending = true;
+        if (_noteDirty)
+        {
+            _data.Note.Content = _noteContent;
+            _data.Note.UpdatedAt = DateTime.UtcNow;
+        }
+
+        try { _store.Save(_data); }
+        catch (Exception ex)
+        {
+            StorageNotice = "保存失败，修改仍保留在内存中，将每 5 秒重试：" + ex.Message;
+            SaveStatus = "保存失败，将自动重试";
+            if (_detailDirtyId != null && _taskVm.TryGetValue(_detailDirtyId, out var pending))
+                pending.DetailStatus = SaveStatus;
+            _retrySave.Start();
+            return false;
+        }
+
+        var detailId = _detailDirtyId;
+        _noteDirty = false;
+        _detailDirtyId = null;
+        _savePending = false;
+        _debounce.Stop(); _maxWait.Stop(); _retrySave.Stop();
+        StorageNotice = _store.LoadNotice;
+        SaveStatus = "已保存 " + DateTime.Now.ToString("HH:mm:ss");
+        if (detailId != null && _taskVm.TryGetValue(detailId, out var saved))
+            saved.DetailStatus = SaveStatus;
+        return true;
     }
 
     // ---- project manager hooks (called by ProjectManagerWindow) -----------

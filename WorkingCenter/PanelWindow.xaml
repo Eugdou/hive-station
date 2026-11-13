@@ -17,6 +17,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -54,8 +55,14 @@
                 </Grid>
             </Border>
 
-            <!-- Work / Settings views share Row 1; visibility bound to CurrentView -->
-            <Grid Grid.Row="1">
+            <Border Grid.Row="1" Background="{DynamicResource DangerSoftBg}" Padding="12,8"
+                    Visibility="{Binding DataContext.StorageNotice, ElementName=WorkspaceHost, Converter={StaticResource NonEmptyToVis}}">
+                <TextBlock Text="{Binding DataContext.StorageNotice, ElementName=WorkspaceHost}"
+                           Foreground="{DynamicResource Danger}" FontSize="12" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- Work / Settings views share Row 2; visibility bound to CurrentView -->
+            <Grid Grid.Row="2">
                 <local:Workspace x:Name="WorkspaceHost"
                         Visibility="{Binding CurrentView, Converter={StaticResource BoolToVis}, ConverterParameter=work}"/>
                 <local:SettingsView x:Name="SettingsHost"

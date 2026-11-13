@@ -6,12 +6,14 @@ namespace WorkingCenter.Models;
 public sealed class AppData
 {
     /// <summary>Bumped whenever the schema changes; the store runs migration
-    /// functions to bring older snapshots up to the current version.</summary>
+    /// functions to bring older snapshots up to the current version.
+    /// v3 = adds Reminders list.</summary>
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public List<Project> Projects { get; set; } = new();
     public List<TodoTask> Tasks { get; set; } = new();
+    public List<Reminder> Reminders { get; set; } = new();
     public QuickNote Note { get; set; } = new();
     public string? SelectedProjectId { get; set; }
 

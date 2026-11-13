@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WorkingCenter.Core;
 using WorkingCenter.Models;
 
 namespace WorkingCenter.Data;
@@ -18,11 +19,11 @@ internal static class DataMigrator
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            if (root.TryGetProperty("tasks", out _) || root.TryGetProperty("projects", out _))
+            if (TryGet(root, "tasks", out _) || TryGet(root, "projects", out _))
             {
                 data = FromNative(root);
             }
-            else if (root.TryGetProperty("todos", out _))
+            else if (TryGet(root, "todos", out _))
             {
                 data = FromLegacy(root);
             }
@@ -51,7 +52,7 @@ internal static class DataMigrator
         var data = new AppData();
         var now = DateTime.UtcNow;
 
-        if (root.TryGetProperty("projects", out var projs))
+        if (TryGet(root, "projects", out var projs))
             foreach (var p in projs.EnumerateArray())
                 data.Projects.Add(new Project
                 {
@@ -63,7 +64,7 @@ internal static class DataMigrator
                     UpdatedAt = Date(p, "updatedAt") ?? now,
                 });
 
-        if (root.TryGetProperty("tasks", out var tasks))
+        if (TryGet(root, "tasks", out var tasks))
             foreach (var t in tasks.EnumerateArray())
                 data.Tasks.Add(new TodoTask
                 {
@@ -79,7 +80,28 @@ internal static class DataMigrator
                     CompletedAt = Date(t, "completedAt"),
                 });
 
-        if (root.TryGetProperty("note", out var note))
+        if (TryGet(root, "reminders", out var rems))
+            foreach (var r in rems.EnumerateArray())
+            {
+                var rec = ReadRecurrence(r);
+                var reminder = new Reminder
+                {
+                    Id = Str(r, "id"),
+                    Title = Str(r, "title"),
+                    Recurrence = rec,
+                    Time = Str(r, "time") is "" ? "09:00" : Str(r, "time"),
+                    OnceDate = Str(r, "onceDate"),
+                    Day = Int(r, "day") is 0 ? 1 : Int(r, "day"),
+                    Enabled = !HasExplicitFalse(r, "enabled"),
+                    NextTriggerAt = Date(r, "nextTriggerAt") ?? default,
+                    CreatedAt = Date(r, "createdAt") ?? now,
+                    UpdatedAt = Date(r, "updatedAt") ?? now,
+                };
+                ValidateReminder(reminder);
+                data.Reminders.Add(reminder);
+            }
+
+        if (TryGet(root, "note", out var note))
             data.Note = new QuickNote
             {
                 Id = "main",
@@ -90,7 +112,7 @@ internal static class DataMigrator
         else
             data.Note = new QuickNote { Id = "main", Content = "", CreatedAt = now, UpdatedAt = now };
 
-        data.SelectedProjectId = root.TryGetProperty("selectedProjectId", out var sp) && sp.ValueKind == JsonValueKind.String
+        data.SelectedProjectId = TryGet(root, "selectedProjectId", out var sp) && sp.ValueKind == JsonValueKind.String
             ? sp.GetString() : null;
         return data;
     }
@@ -101,7 +123,7 @@ internal static class DataMigrator
         var now = DateTime.UtcNow;
 
         // notes (string) -> single quick note
-        string notes = root.TryGetProperty("notes", out var n) && n.ValueKind == JsonValueKind.String
+        string notes = TryGet(root, "notes", out var n) && n.ValueKind == JsonValueKind.String
             ? n.GetString() ?? "" : "";
         data.Note = new QuickNote { Id = "main", Content = notes, CreatedAt = now, UpdatedAt = now };
 
@@ -110,7 +132,7 @@ internal static class DataMigrator
         int sortIdx = 0;
         int projOrder = 0;
 
-        if (root.TryGetProperty("todos", out var todos) && todos.ValueKind == JsonValueKind.Array)
+        if (TryGet(root, "todos", out var todos) && todos.ValueKind == JsonValueKind.Array)
         {
             foreach (var t in todos.EnumerateArray())
             {
@@ -149,11 +171,39 @@ internal static class DataMigrator
         return data;
     }
 
+    private static ReminderRecurrence ReadRecurrence(JsonElement reminder)
+    {
+        if (!TryGet(reminder, "recurrence", out var value)) return ReminderRecurrence.Daily;
+        if (value.ValueKind == JsonValueKind.String
+            && Enum.TryParse<ReminderRecurrence>(value.GetString(), true, out var named)
+            && Enum.IsDefined(named)) return named;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int numeric)
+            && Enum.IsDefined(typeof(ReminderRecurrence), numeric)) return (ReminderRecurrence)numeric;
+        throw new FormatException("提醒周期无效，应为单次、每日、每周或每月。");
+    }
+
+    private static void ValidateReminder(Reminder reminder)
+    {
+        if (!ReminderRules.TryNormalizeTime(reminder.Time, out var time, out _))
+            throw new FormatException($"提醒“{reminder.Title}”的时间无效。");
+        reminder.Time = time;
+        if (reminder.Recurrence == ReminderRecurrence.Once)
+        {
+            if (!ReminderRules.TryNormalizeDate(reminder.OnceDate, out var date, out _))
+                throw new FormatException($"提醒“{reminder.Title}”的日期无效。");
+            reminder.OnceDate = date;
+        }
+        if ((reminder.Recurrence == ReminderRecurrence.Weekly && (reminder.Day is < 1 or > 7))
+            || (reminder.Recurrence == ReminderRecurrence.Monthly && (reminder.Day is < 1 or > 31)))
+            throw new FormatException($"提醒“{reminder.Title}”的周几或几号无效。");
+    }
+
     // --- tiny JSON helpers (CASE-INSENSITIVE so we accept both the native
     //     PascalCase export 'Id','Name','Title' and the legacy lowercase web
     //     export 'id','text','project') -------------------------------------
     private static bool TryGet(JsonElement e, string name, out JsonElement p)
     {
+        if (e.ValueKind != JsonValueKind.Object) { p = default; return false; }
         if (e.TryGetProperty(name, out p)) return true;          // exact (legacy lowercase)
         // case-insensitive fallback (native PascalCase)
         foreach (var prop in e.EnumerateObject())
@@ -168,6 +218,8 @@ internal static class DataMigrator
         TryGet(e, name, out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : 0;
     private static bool Bool(JsonElement e, string name) =>
         TryGet(e, name, out var p) && p.ValueKind == JsonValueKind.True;
+    private static bool HasExplicitFalse(JsonElement e, string name) =>
+        TryGet(e, name, out var p) && p.ValueKind == JsonValueKind.False;
     private static DateTime? Date(JsonElement e, string name) =>
         TryGet(e, name, out var p) && p.ValueKind == JsonValueKind.String && DateTime.TryParse(p.GetString(), out var d) ? d : null;
 }

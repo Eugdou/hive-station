@@ -3,8 +3,26 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:WorkingCenter.ViewModels"
              xmlns:core="clr-namespace:WorkingCenter.Core"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
              FontFamily="Segoe UI, Microsoft YaHei"
              Background="Transparent">
+    <UserControl.Resources>
+        <!-- reminder form pickers -->
+        <x:Array x:Key="WeekDayItems" Type="sys:String">
+            <sys:String>周一</sys:String><sys:String>周二</sys:String><sys:String>周三</sys:String>
+            <sys:String>周四</sys:String><sys:String>周五</sys:String><sys:String>周六</sys:String><sys:String>周日</sys:String>
+        </x:Array>
+        <x:Array x:Key="MonthDayItems" Type="sys:String">
+            <sys:String>1日</sys:String><sys:String>2日</sys:String><sys:String>3日</sys:String><sys:String>4日</sys:String>
+            <sys:String>5日</sys:String><sys:String>6日</sys:String><sys:String>7日</sys:String><sys:String>8日</sys:String>
+            <sys:String>9日</sys:String><sys:String>10日</sys:String><sys:String>11日</sys:String><sys:String>12日</sys:String>
+            <sys:String>13日</sys:String><sys:String>14日</sys:String><sys:String>15日</sys:String><sys:String>16日</sys:String>
+            <sys:String>17日</sys:String><sys:String>18日</sys:String><sys:String>19日</sys:String><sys:String>20日</sys:String>
+            <sys:String>21日</sys:String><sys:String>22日</sys:String><sys:String>23日</sys:String><sys:String>24日</sys:String>
+            <sys:String>25日</sys:String><sys:String>26日</sys:String><sys:String>27日</sys:String><sys:String>28日</sys:String>
+            <sys:String>29日</sys:String><sys:String>30日</sys:String><sys:String>31日</sys:String>
+        </x:Array>
+    </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,14,16,8">
         <StackPanel>
 
@@ -82,19 +100,19 @@
                                                     </Style.Triggers>
                                                 </Style>
                                             </StackPanel.Style>
-                                            <Button Style="{StaticResource ActBtn}" Click="ProjectUp_Click" Tag="{Binding Id}" ToolTip="上移">
+                                            <Button Style="{StaticResource ActBtn}" Click="ProjectUp_Click" Tag="{Binding Id}">
                                                 <Path Data="{StaticResource UpIcon}" Stroke="{DynamicResource Muted}" StrokeThickness="2"
                                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
                                             </Button>
-                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="ProjectDown_Click" Tag="{Binding Id}" ToolTip="下移">
+                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="ProjectDown_Click" Tag="{Binding Id}">
                                                 <Path Data="{StaticResource DownIcon}" Stroke="{DynamicResource Muted}" StrokeThickness="2"
                                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
                                             </Button>
-                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="Rename_Click" Tag="{Binding Id}" ToolTip="改名">
+                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="Rename_Click" Tag="{Binding Id}">
                                                 <Path Data="{StaticResource EditIcon}" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2"
                                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
                                             </Button>
-                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="Delete_Click" Tag="{Binding Id}" ToolTip="删除">
+                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="Delete_Click" Tag="{Binding Id}">
                                                 <Path Data="{StaticResource DeleteIcon}" Stroke="{DynamicResource Danger}" StrokeThickness="2"
                                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
                                             </Button>
@@ -155,13 +173,179 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="NewProjName" Grid.Column="0" Margin="0,0,8,0" Style="{StaticResource Input}" Height="32" FontSize="13"
-                                     KeyDown="NewProjName_KeyDown" ToolTip="新项目名称，回车添加"/>
+                                     KeyDown="NewProjName_KeyDown"/>
                             <Button Grid.Column="1" Content="添加项目" Click="AddProj_Click" Style="{StaticResource AccentButton}" Height="32"/>
                         </Grid>
                         <TextBlock Text="{Binding AddProjectError}" FontSize="11" Foreground="{DynamicResource Danger}" Margin="0,6,0,0"
                                    TextWrapping="Wrap"
                                    Visibility="{Binding AddProjectError, Converter={StaticResource NonEmptyToVis}}"/>
                     </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- 4. 提醒事项 -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="提醒事项" Style="{StaticResource SectionLabel}"/>
+
+                    <!-- new-reminder form (two rows; fields adapt to type) -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Style="{StaticResource Input}" Margin="0,0,8,0"
+                                 Text="{Binding NewReminderTitle, UpdateSourceTrigger=PropertyChanged}"
+                                />
+                        <ComboBox Grid.Column="1" Style="{StaticResource Combo}" Width="76"
+                                  SelectedIndex="{Binding NewReminderTypeIndex}">
+                            <ComboBoxItem Content="单次"/>
+                            <ComboBoxItem Content="每日"/>
+                            <ComboBoxItem Content="每周"/>
+                            <ComboBoxItem Content="每月"/>
+                        </ComboBox>
+                    </Grid>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" Margin="0,0,8,0">
+                            <TextBox Style="{StaticResource Input}" x:Name="NewRemDateBox"
+                                     Text="{Binding NewReminderDateText, UpdateSourceTrigger=PropertyChanged}"
+                                     Visibility="{Binding NewFormIsOnce, Converter={StaticResource BoolToVis}}"/>
+                            <!-- 每日：无可选日期，用占位说明保持布局稳定不跳动 -->
+                            <Border Background="{DynamicResource InputBg}" BorderBrush="{DynamicResource InputBorder}"
+                                    BorderThickness="1" CornerRadius="6" Padding="8,6"
+                                    Visibility="{Binding NewFormIsDaily, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="每天同一时间触发" FontSize="12" Foreground="{DynamicResource Faint}"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <ComboBox Style="{StaticResource Combo}"
+                                      ItemsSource="{StaticResource WeekDayItems}"
+                                      SelectedIndex="{Binding NewFormDayIndex}"
+                                      Visibility="{Binding NewFormIsWeekly, Converter={StaticResource BoolToVis}}"/>
+                            <!-- 每月几号：与其他下拉框共用 Combo 模板，支持 31 项滚动选择 -->
+                            <ComboBox Style="{StaticResource Combo}"
+                                      ItemsSource="{StaticResource MonthDayItems}"
+                                      SelectedIndex="{Binding NewFormDayIndex}"
+                                      Visibility="{Binding NewFormIsMonthly, Converter={StaticResource BoolToVis}}"/>
+                        </Grid>
+                        <TextBox Grid.Column="1" Style="{StaticResource Input}" Width="72" Margin="0,0,8,0"
+                                 Text="{Binding NewReminderTimeText, UpdateSourceTrigger=PropertyChanged}"
+                                 KeyDown="NewRemTime_KeyDown"
+                                />
+                        <Button Grid.Column="2" Style="{StaticResource AccentButton}" Content="添加提醒"
+                                Click="AddRem_Click"/>
+                    </Grid>
+                    <TextBlock Text="{Binding AddReminderError}" FontSize="11" Foreground="{DynamicResource Danger}"
+                               Margin="0,0,0,8" TextWrapping="Wrap"
+                               Visibility="{Binding AddReminderError, Converter={StaticResource NonEmptyToVis}}"/>
+
+                    <ItemsControl ItemsSource="{Binding ReminderList}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ReminderItemViewModel}">
+                                <StackPanel Margin="0,8,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Grid.Column="0" Style="{StaticResource Check}" VerticalAlignment="Center"
+                                                  IsChecked="{Binding IsEnabled}"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,8,0">
+                                            <TextBlock Text="{Binding Title}" FontSize="13" Foreground="{DynamicResource Ink}"/>
+                                            <TextBlock Text="{Binding Label}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <StackPanel.Style>
+                                                <Style TargetType="StackPanel">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Grid}, Path=IsMouseOver}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </StackPanel.Style>
+                                            <Button Style="{StaticResource ActBtn}" Click="RemEdit_Click" Tag="{Binding Id}">
+                                                <Path Data="{StaticResource EditIcon}" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
+                                            </Button>
+                                            <Button Style="{StaticResource ActBtn}" Margin="2,0,0,0" Click="RemDelete_Click" Tag="{Binding Id}">
+                                                <Path Data="{StaticResource DeleteIcon}" Stroke="{DynamicResource Danger}" StrokeThickness="2"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="13" Height="13"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- inline edit row: title + time (+ date / weekday / day per type) -->
+                                    <Border Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
+                                            Background="{DynamicResource DetailBg}" CornerRadius="6" Padding="10,8" Margin="0,8,0,0">
+                                        <StackPanel>
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Grid.Column="0" Style="{StaticResource Input}" Margin="0,0,8,0"
+                                                         Text="{Binding EditTitle, UpdateSourceTrigger=PropertyChanged}"
+                                                        />
+                                                <TextBox Grid.Column="1" Style="{StaticResource Input}" Width="72"
+                                                         Text="{Binding EditTime, UpdateSourceTrigger=PropertyChanged}"
+                                                        />
+                                            </Grid>
+                                            <Grid Margin="0,0,0,8"
+                                                  Visibility="{Binding IsOnce, Converter={StaticResource BoolToVis}}">
+                                                <TextBox Style="{StaticResource Input}" Width="130" HorizontalAlignment="Left"
+                                                         Text="{Binding EditDate, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </Grid>
+                                            <Grid Margin="0,0,0,8"
+                                                  Visibility="{Binding IsDaily, Converter={StaticResource BoolToVis}}">
+                                                <Border Background="{DynamicResource InputBg}" BorderBrush="{DynamicResource InputBorder}"
+                                                        BorderThickness="1" CornerRadius="6" Padding="8,6" Width="130" HorizontalAlignment="Left">
+                                                    <TextBlock Text="每天同一时间触发" FontSize="12" Foreground="{DynamicResource Faint}"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                            </Grid>
+                                            <Grid Margin="0,0,0,8">
+                                                <ComboBox Style="{StaticResource Combo}" Width="90" HorizontalAlignment="Left"
+                                                          ItemsSource="{StaticResource WeekDayItems}"
+                                                          SelectedIndex="{Binding EditDayIndex}"
+                                                          Visibility="{Binding IsWeekly, Converter={StaticResource BoolToVis}}"/>
+                                                <ComboBox Style="{StaticResource Combo}" Width="90" HorizontalAlignment="Left"
+                                                          ItemsSource="{StaticResource MonthDayItems}"
+                                                          SelectedIndex="{Binding EditDayIndex}"
+                                                          Visibility="{Binding IsMonthly, Converter={StaticResource BoolToVis}}"/>
+                                            </Grid>
+                                            <TextBlock Text="{Binding EditError}" FontSize="11" Foreground="{DynamicResource Danger}" Margin="0,0,0,6"
+                                                       TextWrapping="Wrap"
+                                                       Visibility="{Binding EditError, Converter={StaticResource NonEmptyToVis}}"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                                                <Button Content="取消" Click="RemCancel_Click" Tag="{Binding Id}" Style="{StaticResource SecondaryButton}" Padding="10,4" FontSize="11" Margin="0,0,6,0"/>
+                                                <Button Content="保存" Click="RemSave_Click" Tag="{Binding Id}" Style="{StaticResource AccentButton}" Padding="10,4" FontSize="11"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- inline delete-confirm -->
+                                    <Border Visibility="{Binding IsDeleteConfirm, Converter={StaticResource BoolToVis}}"
+                                            Background="{DynamicResource DangerSoftBg}" CornerRadius="6" Padding="10,8" Margin="0,8,0,0"
+                                            BorderBrush="{DynamicResource Danger}" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="确定删除该提醒？" FontSize="12" Foreground="{DynamicResource Danger}" Margin="0,0,0,8"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                <Button Content="取消" Click="RemCancel_Click" Tag="{Binding Id}" Style="{StaticResource SecondaryButton}" Padding="10,4" FontSize="11" Margin="0,0,6,0"/>
+                                                <Button Content="确认删除" Click="RemConfirmDelete_Click" Tag="{Binding Id}" Style="{StaticResource DangerSolidButton}" Padding="10,4" FontSize="11"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </Border>
 

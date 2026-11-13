@@ -1,9 +1,9 @@
 using System.Drawing;
-using System.IO;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using WorkingCenter.Data;
 using Application = System.Windows.Application;
 
 namespace WorkingCenter.Core;
@@ -34,7 +34,6 @@ internal sealed class AppState : IDisposable
     private double _panelWidth = 360;
     private int _hideDelayMs = 300;
     private EdgePosition _edge = EdgePosition.Right;
-    private string _settingsPath = "";
 
     // Re-arm gate: after a manual hide, the handle ignores MouseEnter until
     // the mouse has left the tab, so a lingering cursor can't instantly re-pop it.
@@ -95,6 +94,16 @@ internal sealed class AppState : IDisposable
     /// <summary>Flush pending (debounced) note writes through the panel.</summary>
     public void FlushNotes() => _panel?.FlushNotes();
 
+    /// <summary>提醒触发的系统通知：Win10/11 会把托盘气泡转换为标准 Toast
+    /// （横幅+声音+进通知中心）。正文 = 提醒内容本身，不带额外标题行。</summary>
+    public void ShowReminderToast(string message)
+    {
+        const int maxText = 255;
+        var text = message.Length > maxText ? message[..maxText] : message;
+        _tray?.ShowBalloonTip(0, "", text, System.Windows.Forms.ToolTipIcon.None);
+        Logger.Info("Reminder toast shown");
+    }
+
     public void Dispose() => Shutdown();
 
     // ---- positioning -------------------------------------------------------
@@ -147,31 +156,11 @@ internal sealed class AppState : IDisposable
 
     private void LoadEdgeSettings()
     {
-        try
-        {
-            _settingsPath = Path.Combine(AppContext.BaseDirectory, "data", "settings.json");
-            if (File.Exists(_settingsPath))
-            {
-                var txt = File.ReadAllText(_settingsPath);
-                using var doc = System.Text.Json.JsonDocument.Parse(txt);
-                if (doc.RootElement.TryGetProperty("edge", out var e) && e.ValueKind == System.Text.Json.JsonValueKind.String
-                    && Enum.TryParse<EdgePosition>(e.GetString(), out var parsed))
-                    _edge = parsed;
-            }
-        }
-        catch { /* keep default */ }
+        if (Enum.TryParse<EdgePosition>(SettingsStore.GetValue("edge"), out var parsed)
+            && Enum.IsDefined(parsed)) _edge = parsed;
     }
 
-    private void SaveEdgeSettings()
-    {
-        try
-        {
-            var dir = Path.GetDirectoryName(_settingsPath)!;
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(_settingsPath, "{\"edge\":\"" + _edge + "\"}");
-        }
-        catch { /* best-effort */ }
-    }
+    private void SaveEdgeSettings() => SettingsStore.SetValue("edge", _edge.ToString());
 
     /// <summary>Switch the dock edge (left/right) at runtime: reposition handle +
     /// panel and persist. Called from the settings page via the VM callback.</summary>
